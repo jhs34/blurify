@@ -32,7 +32,7 @@ const INITIAL_SETTINGS: EditorSettings = {
   feather: 30,
   angle: 0,
   overlayEnabled: false,
-  overlayColor: '#ef4444',
+  overlayColor: '#e5484d',
 };
 
 export default function App() {
@@ -308,9 +308,11 @@ export default function App() {
   const handleFillMask = useCallback(() => {
     const engine = engineRef.current!;
     if (!engine.hasImage) return;
-    engine.fillEntireMask();
-    commitHistorySnapshot();
-    scheduleRender();
+    const { effectType, strength } = settingsRef.current;
+    if (engine.fillEntireMask(effectType, strength)) {
+      commitHistorySnapshot();
+      scheduleRender();
+    }
   }, [commitHistorySnapshot, scheduleRender]);
 
   const updateSettings = useCallback(
@@ -319,13 +321,6 @@ export default function App() {
       const merged: EditorSettings = { ...prev, ...patch };
       settingsRef.current = merged;
       setSettings(merged);
-
-      if (
-        patch.effectType !== undefined ||
-        patch.strength !== undefined
-      ) {
-        engineRef.current!.rebuildEffect(merged.effectType, merged.strength);
-      }
 
       if (showPreview) {
         triggerToolPreview();
@@ -339,15 +334,12 @@ export default function App() {
     (clickedTool: ToolType) => {
       const isMobile = window.innerWidth < 768;
       if (settingsRef.current.tool === clickedTool) {
-        if (isMobile && clickedTool !== 'move') {
+        if (isMobile) {
           setIsMobileSheetOpen((open) => !open);
         }
         return;
       }
       updateSettings({ tool: clickedTool });
-      if (isMobile) {
-        setIsMobileSheetOpen(clickedTool !== 'move');
-      }
     },
     [updateSettings]
   );
@@ -879,7 +871,7 @@ export default function App() {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className="h-dvh w-full flex flex-col bg-[#0B0E14] text-slate-100 select-none overflow-hidden"
+      className="h-dvh w-full flex flex-col bg-[#141415] text-[#ededed] select-none overflow-hidden"
     >
       <input
         ref={fileInputRef}
@@ -901,7 +893,6 @@ export default function App() {
         isComparing={isComparing}
         isSaving={isSaving}
         exportFormat={exportFormat}
-        isMobileSheetOpen={isMobileSheetOpen}
         onOpenFileClick={() => fileInputRef.current?.click()}
         onUndo={handleUndo}
         onRedo={handleRedo}
@@ -913,7 +904,6 @@ export default function App() {
         }}
         onExportFormatChange={setExportFormat}
         onSave={handleSave}
-        onToggleMobileSheet={() => setIsMobileSheetOpen((v) => !v)}
       />
 
       <div className="flex-1 flex min-h-0 relative">
@@ -936,18 +926,20 @@ export default function App() {
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
-          className={`flex-1 relative overflow-hidden workspace-grid ${workspaceCursor}`}
+          className={`flex-1 relative overflow-hidden workspace-grid ${
+            hasImage ? 'touch-none' : 'touch-pan-y'
+          } ${workspaceCursor}`}
         >
           {errorMessage && (
             <div
               role="alert"
-              className="absolute top-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2.5 rounded-xl bg-rose-950/90 border border-rose-500/40 text-xs text-rose-200 flex items-center gap-3 shadow-lg"
+              className="absolute top-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-lg bg-[#19191b] border border-[#e5484d]/40 text-xs text-[#ededed] flex items-center gap-3 shadow-[0_8px_24px_rgba(0,0,0,0.45)]"
             >
               <span>{errorMessage}</span>
               <button
                 type="button"
                 onClick={() => setErrorMessage(null)}
-                className="text-rose-300 hover:text-white font-semibold cursor-pointer"
+                className="text-[#a1a1a6] hover:text-[#ededed] font-medium cursor-pointer"
               >
                 닫기
               </button>
@@ -955,8 +947,8 @@ export default function App() {
           )}
 
           {isComparing && hasImage && (
-            <div className="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 z-30 px-3 py-1 rounded-md bg-slate-900/90 border border-slate-700/80 text-xs font-medium text-sky-300">
-              원본 미리보기 중
+            <div className="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 z-30 px-3 py-1.5 rounded-md bg-[#0f0f10]/90 border border-[#ededed]/[0.10] text-xs font-normal text-[#ededed]">
+              원본 미리보기
             </div>
           )}
 
@@ -988,9 +980,9 @@ export default function App() {
 
           {/* Drag-over highlight overlay when an image is already open */}
           {hasImage && isDraggingOver && (
-            <div className="pointer-events-none absolute inset-3 rounded-2xl border-2 border-dashed border-sky-400 bg-sky-500/10 flex items-center justify-center z-30">
-              <span className="px-4 py-2 rounded-xl bg-slate-900/95 text-sm font-semibold text-sky-300">
-                놓아서 새 이미지로 교체
+            <div className="pointer-events-none absolute inset-4 rounded-xl border border-dashed border-[#3b82f6] bg-[#19191b]/70 flex items-center justify-center z-30">
+              <span className="px-4 py-2 rounded-lg bg-[#0f0f10] border border-[#ededed]/[0.10] text-sm font-medium text-[#ededed]">
+                놓아서 새 이미지 열기
               </span>
             </div>
           )}
@@ -1017,7 +1009,9 @@ export default function App() {
         <MobileToolBar
           activeTool={settings.tool}
           disabled={!hasImage}
+          isInspectorOpen={isMobileSheetOpen}
           onSelectTool={handleSelectTool}
+          onToggleInspector={() => setIsMobileSheetOpen((v) => !v)}
         />
       )}
     </div>

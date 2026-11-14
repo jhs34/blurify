@@ -73,7 +73,7 @@ export function createSampleCanvas(): HTMLCanvasElement {
 
   ctx.fillStyle = '#38bdf8';
   ctx.font = '700 20px "Plus Jakarta Sans", sans-serif';
-  ctx.fillText('SEOUL MEDIA LAB · VISITOR PASS', -192, -233);
+  ctx.fillText('SAMPLE PASS · ID CARD', -192, -233);
 
   // Portrait frame (ideal for Ellipse / Brush blur test)
   ctx.fillStyle = '#e2e8f0';
@@ -95,21 +95,21 @@ export function createSampleCanvas(): HTMLCanvasElement {
   ctx.fillText('성명 / NAME', -6, -135);
   ctx.fillStyle = '#0f172a';
   ctx.font = '700 20px "Plus Jakarta Sans", sans-serif';
-  ctx.fillText('김서준 · Kim Seo-jun', -6, -102);
+  ctx.fillText('홍길동 · Hong Gil-dong', -6, -102);
 
   ctx.fillStyle = '#64748b';
   ctx.font = '600 14px "Plus Jakarta Sans", sans-serif';
   ctx.fillText('연락처 / PHONE', -6, -48);
   ctx.fillStyle = '#0f172a';
   ctx.font = '600 20px "JetBrains Mono", monospace';
-  ctx.fillText('010-8492-3710', -6, -18);
+  ctx.fillText('010 0000 0000', -6, -18);
 
   ctx.fillStyle = '#64748b';
   ctx.font = '600 15px "Plus Jakarta Sans", sans-serif';
   ctx.fillText('사원번호 / ID NO.', -190, 92);
   ctx.fillStyle = '#0f172a';
   ctx.font = '600 23px "JetBrains Mono", monospace';
-  ctx.fillText('SML-2026-094812', -190, 126);
+  ctx.fillText('ID-0000-000000', -190, 126);
 
   // Simulated barcode strip
   ctx.fillStyle = '#0f172a';
@@ -138,20 +138,20 @@ export function createSampleCanvas(): HTMLCanvasElement {
 
   ctx.fillStyle = '#b45309';
   ctx.font = '700 18px "JetBrains Mono", monospace';
-  ctx.fillText('EXPRESS PARCEL · WAYBILL #4902-8831-7740', -276, -114);
+  ctx.fillText('SAMPLE PARCEL · WAYBILL #0000-0000-0000', -276, -114);
 
   ctx.fillStyle = '#1e293b';
   ctx.font = '700 25px "Plus Jakarta Sans", sans-serif';
-  ctx.fillText('받는분: 박지민  |  010-5921-6048', -276, -54);
+  ctx.fillText('받는분: 홍길동  |  010 0000 0000', -276, -54);
 
   ctx.fillStyle = '#334155';
   ctx.font = '500 22px "Plus Jakarta Sans", sans-serif';
-  ctx.fillText('서울특별시 성동구 연무장길 74-12, 402호', -276, 0);
-  ctx.fillText('현관 비밀번호 메모: #4829* (문 앞 보관)', -276, 44);
+  ctx.fillText('서울특별시 OO구 OO로 00, 000동 0000호', -276, 0);
+  ctx.fillText('공동현관 메모: #0000* (문 앞 보관)', -276, 44);
 
   ctx.fillStyle = '#64748b';
   ctx.font = '500 17px "JetBrains Mono", monospace';
-  ctx.fillText('CARD AUTH: 9410-****-****-7382   EXP 09/29', -276, 104);
+  ctx.fillText('CARD NO: 0000-0000-0000-0000   EXP 00/00', -276, 104);
   ctx.restore();
 
   // 3. Bottom-Right: Tilted Korean Vehicle License Plate (ideal for rotated Rect tool!)
@@ -186,7 +186,7 @@ export function createSampleCanvas(): HTMLCanvasElement {
   // Crisp license plate number
   ctx.fillStyle = '#0f172a';
   ctx.font = '700 80px "JetBrains Mono", monospace';
-  ctx.fillText('128가 4927', -208, 28);
+  ctx.fillText('000가 0000', -208, 28);
   ctx.restore();
 
   return canvas;

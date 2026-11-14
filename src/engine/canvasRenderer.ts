@@ -36,14 +36,25 @@ export class BlurifyCanvasEngine {
   private effectCanvas = document.createElement('canvas');
   private effectCtx = this.effectCanvas.getContext('2d')!;
 
-  private maskCanvas = document.createElement('canvas');
-  private maskCtx = this.maskCanvas.getContext('2d')!;
+  // Committed RGBA redaction overlay: each painted stroke bakes its own effect & strength here
+  private redactedCanvas = document.createElement('canvas');
+  private redactedCtx = this.redactedCanvas.getContext('2d')!;
 
+  // Live working RGBA redaction overlay while dragging a stroke
+  private workRedactedCanvas = document.createElement('canvas');
+  private workRedactedCtx = this.workRedactedCanvas.getContext('2d')!;
+
+  // Raw unfeathered #ffffff geometry of the active stroke only
   private tempMaskCanvas = document.createElement('canvas');
   private tempMaskCtx = this.tempMaskCanvas.getContext('2d')!;
 
-  private workMaskCanvas = document.createElement('canvas');
-  private workMaskCtx = this.workMaskCanvas.getContext('2d')!;
+  // Feathered alpha mask of the active stroke only
+  private featheredStrokeCanvas = document.createElement('canvas');
+  private featheredStrokeCtx = this.featheredStrokeCanvas.getContext('2d')!;
+
+  // Scratch buffer holding effectCanvas masked by featheredStrokeCanvas for the active stroke
+  private strokePatchCanvas = document.createElement('canvas');
+  private strokePatchCtx = this.strokePatchCanvas.getContext('2d')!;
 
   private scratchScaleCanvas = document.createElement('canvas');
   private scratchScaleCtx = this.scratchScaleCanvas.getContext('2d')!;
@@ -51,9 +62,12 @@ export class BlurifyCanvasEngine {
   private screenLayerCanvas = document.createElement('canvas');
   private screenLayerCtx = this.screenLayerCanvas.getContext('2d')!;
 
+  private probeCanvas = document.createElement('canvas');
+
   private hasLoadedImage = false;
   private isDrawing = false;
   private strokeModified = false;
+  private cachedEffectKey: string | null = null;
 
   private activeTool: ToolType = 'brush';
   private activeAction: MaskAction = 'draw';
@@ -97,9 +111,11 @@ export class BlurifyCanvasEngine {
     for (const c of [
       this.origCanvas,
       this.effectCanvas,
-      this.maskCanvas,
+      this.redactedCanvas,
+      this.workRedactedCanvas,
       this.tempMaskCanvas,
-      this.workMaskCanvas,
+      this.featheredStrokeCanvas,
+      this.strokePatchCanvas,
     ]) {
       c.width = w;
       c.height = h;
@@ -108,15 +124,28 @@ export class BlurifyCanvasEngine {
     this.origCtx.clearRect(0, 0, w, h);
     this.origCtx.drawImage(source, 0, 0, w, h);
 
-    this.maskCtx.clearRect(0, 0, w, h);
+    this.redactedCtx.clearRect(0, 0, w, h);
+    this.workRedactedCtx.clearRect(0, 0, w, h);
     this.tempMaskCtx.clearRect(0, 0, w, h);
-    this.workMaskCtx.clearRect(0, 0, w, h);
+    this.featheredStrokeCtx.clearRect(0, 0, w, h);
+    this.strokePatchCtx.clearRect(0, 0, w, h);
 
     this.hasLoadedImage = true;
     this.isDrawing = false;
     this.strokeModified = false;
+    this.cachedEffectKey = null;
 
-    this.rebuildEffect(effectType, strength);
+    this.ensureEffectReady(effectType, strength);
+  }
+
+  ensureEffectReady(effectType: EffectType, strength: number): void {
+    if (!this.hasLoadedImage) return;
+    const roundedStrength = clamp(Math.round(strength), 0, 100);
+    const key = `${effectType}:${roundedStrength}`;
+    if (this.cachedEffectKey === key) return;
+
+    this.rebuildEffect(effectType, roundedStrength);
+    this.cachedEffectKey = key;
   }
 
   rebuildEffect(effectType: EffectType, strength: number): void {
@@ -214,36 +243,42 @@ export class BlurifyCanvasEngine {
 
   captureMaskSnapshot(): HTMLCanvasElement {
     const snap = document.createElement('canvas');
-    snap.width = Math.max(1, this.maskCanvas.width);
-    snap.height = Math.max(1, this.maskCanvas.height);
+    snap.width = Math.max(1, this.redactedCanvas.width);
+    snap.height = Math.max(1, this.redactedCanvas.height);
     if (this.hasLoadedImage) {
-      snap.getContext('2d')!.drawImage(this.maskCanvas, 0, 0);
+      snap.getContext('2d')!.drawImage(this.redactedCanvas, 0, 0);
     }
     return snap;
   }
 
   restoreMaskSnapshot(snap: HTMLCanvasElement): void {
     if (!this.hasLoadedImage) return;
-    this.maskCtx.clearRect(0, 0, this.maskCanvas.width, this.maskCanvas.height);
-    this.maskCtx.drawImage(
+    this.redactedCtx.clearRect(
+      0,
+      0,
+      this.redactedCanvas.width,
+      this.redactedCanvas.height
+    );
+    this.redactedCtx.drawImage(
       snap,
       0,
       0,
-      this.maskCanvas.width,
-      this.maskCanvas.height
+      this.redactedCanvas.width,
+      this.redactedCanvas.height
     );
   }
 
   isMaskEmpty(): boolean {
     if (!this.hasLoadedImage) return true;
-    // Quick sample check via downscaled 64x64 alpha probe
-    const probeW = Math.min(64, this.maskCanvas.width);
-    const probeH = Math.min(64, this.maskCanvas.height);
-    const probe = document.createElement('canvas');
-    probe.width = probeW;
-    probe.height = probeH;
-    const pCtx = probe.getContext('2d')!;
-    pCtx.drawImage(this.maskCanvas, 0, 0, probeW, probeH);
+    const probeW = Math.min(64, this.redactedCanvas.width);
+    const probeH = Math.min(64, this.redactedCanvas.height);
+    if (this.probeCanvas.width !== probeW || this.probeCanvas.height !== probeH) {
+      this.probeCanvas.width = probeW;
+      this.probeCanvas.height = probeH;
+    }
+    const pCtx = this.probeCanvas.getContext('2d')!;
+    pCtx.clearRect(0, 0, probeW, probeH);
+    pCtx.drawImage(this.redactedCanvas, 0, 0, probeW, probeH);
     const data = pCtx.getImageData(0, 0, probeW, probeH).data;
     for (let i = 3; i < data.length; i += 4) {
       if (data[i] > 0) return false;
@@ -253,20 +288,26 @@ export class BlurifyCanvasEngine {
 
   clearMask(): boolean {
     if (!this.hasLoadedImage) return false;
-    this.maskCtx.clearRect(0, 0, this.maskCanvas.width, this.maskCanvas.height);
-    this.workMaskCtx.clearRect(
+    this.redactedCtx.clearRect(
       0,
       0,
-      this.workMaskCanvas.width,
-      this.workMaskCanvas.height
+      this.redactedCanvas.width,
+      this.redactedCanvas.height
+    );
+    this.workRedactedCtx.clearRect(
+      0,
+      0,
+      this.workRedactedCanvas.width,
+      this.workRedactedCanvas.height
     );
     return true;
   }
 
-  fillEntireMask(): boolean {
-    if (!this.hasLoadedImage) return false;
-    this.maskCtx.fillStyle = '#ffffff';
-    this.maskCtx.fillRect(0, 0, this.maskCanvas.width, this.maskCanvas.height);
+  fillEntireMask(effectType: EffectType, strength: number): boolean {
+    if (!this.hasLoadedImage || strength <= 0) return false;
+    this.ensureEffectReady(effectType, strength);
+    this.redactedCtx.globalCompositeOperation = 'source-over';
+    this.redactedCtx.drawImage(this.effectCanvas, 0, 0);
     return true;
   }
 
@@ -276,6 +317,11 @@ export class BlurifyCanvasEngine {
     modifiers: { altKey?: boolean; shiftKey?: boolean } = {}
   ): void {
     if (!this.hasLoadedImage || settings.tool === 'move') return;
+    if (settings.action === 'draw' && settings.strength <= 0) return;
+
+    if (settings.action === 'draw') {
+      this.ensureEffectReady(settings.effectType, settings.strength);
+    }
 
     const w = this.origCanvas.width;
     const h = this.origCanvas.height;
@@ -304,8 +350,10 @@ export class BlurifyCanvasEngine {
     this.prevClippedBounds = null;
 
     this.tempMaskCtx.clearRect(0, 0, w, h);
-    this.workMaskCtx.clearRect(0, 0, w, h);
-    this.workMaskCtx.drawImage(this.maskCanvas, 0, 0);
+    this.featheredStrokeCtx.clearRect(0, 0, w, h);
+    this.strokePatchCtx.clearRect(0, 0, w, h);
+    this.workRedactedCtx.clearRect(0, 0, w, h);
+    this.workRedactedCtx.drawImage(this.redactedCanvas, 0, 0);
 
     if (this.activeTool === 'brush') {
       this.drawBrushSegment(imgPos, true);
@@ -324,7 +372,6 @@ export class BlurifyCanvasEngine {
 
     if (this.activeTool === 'brush') {
       if (this.activeShiftStraight) {
-        // Straight-line brush preview from startPos to currPos
         this.tempMaskCtx.clearRect(
           0,
           0,
@@ -349,7 +396,7 @@ export class BlurifyCanvasEngine {
           maxY: Math.max(this.startPos.y, imgPos.y) + r,
         };
         this.strokeModified = true;
-        this.syncWorkingMask();
+        this.syncWorkingRedaction();
       } else {
         this.drawBrushSegment(imgPos, false);
       }
@@ -373,9 +420,14 @@ export class BlurifyCanvasEngine {
       return false;
     }
 
-    // Commit workMaskCanvas directly so there is zero discrepancy with live preview
-    this.maskCtx.clearRect(0, 0, this.maskCanvas.width, this.maskCanvas.height);
-    this.maskCtx.drawImage(this.workMaskCanvas, 0, 0);
+    // Commit workRedactedCanvas directly so committed pixels match live preview 1:1
+    this.redactedCtx.clearRect(
+      0,
+      0,
+      this.redactedCanvas.width,
+      this.redactedCanvas.height
+    );
+    this.redactedCtx.drawImage(this.workRedactedCanvas, 0, 0);
     this.tempMaskCtx.clearRect(
       0,
       0,
@@ -443,7 +495,7 @@ export class BlurifyCanvasEngine {
 
     this.lastPos = { ...pos };
     this.strokeModified = true;
-    this.syncWorkingMask();
+    this.syncWorkingRedaction();
   }
 
   private drawShapePreview(curr: Point): void {
@@ -469,7 +521,7 @@ export class BlurifyCanvasEngine {
 
       this.dirtyBounds = { minX: 0, minY: 0, maxX: w, maxY: h };
       this.strokeModified = true;
-      this.syncWorkingMask();
+      this.syncWorkingRedaction();
       return;
     }
 
@@ -502,24 +554,36 @@ export class BlurifyCanvasEngine {
       maxY: box.cy + diagRadius,
     };
     this.strokeModified = true;
-    this.syncWorkingMask();
+    this.syncWorkingRedaction();
   }
 
-  private syncWorkingMask(): void {
-    const w = this.workMaskCanvas.width;
-    const h = this.workMaskCanvas.height;
+  private syncWorkingRedaction(): void {
+    const w = this.workRedactedCanvas.width;
+    const h = this.workRedactedCanvas.height;
 
     if (!this.dirtyBounds) return;
 
-    // For full-canvas tools like linear gradient (blurRadius === 0), fast full composite
+    // Full-canvas linear gradient composite
     if (this.activeTool === 'linear') {
-      this.workMaskCtx.clearRect(0, 0, w, h);
-      this.workMaskCtx.drawImage(this.maskCanvas, 0, 0);
-      this.workMaskCtx.save();
-      this.workMaskCtx.globalCompositeOperation =
-        this.activeAction === 'erase' ? 'destination-out' : 'source-over';
-      this.workMaskCtx.drawImage(this.tempMaskCanvas, 0, 0);
-      this.workMaskCtx.restore();
+      this.workRedactedCtx.clearRect(0, 0, w, h);
+      this.workRedactedCtx.globalCompositeOperation = 'source-over';
+      this.workRedactedCtx.drawImage(this.redactedCanvas, 0, 0);
+
+      if (this.activeAction === 'erase') {
+        this.workRedactedCtx.save();
+        this.workRedactedCtx.globalCompositeOperation = 'destination-out';
+        this.workRedactedCtx.drawImage(this.tempMaskCanvas, 0, 0);
+        this.workRedactedCtx.restore();
+      } else {
+        this.strokePatchCtx.clearRect(0, 0, w, h);
+        this.strokePatchCtx.globalCompositeOperation = 'source-over';
+        this.strokePatchCtx.drawImage(this.effectCanvas, 0, 0);
+        this.strokePatchCtx.globalCompositeOperation = 'destination-in';
+        this.strokePatchCtx.drawImage(this.tempMaskCanvas, 0, 0);
+        this.strokePatchCtx.globalCompositeOperation = 'source-over';
+
+        this.workRedactedCtx.drawImage(this.strokePatchCanvas, 0, 0);
+      }
       return;
     }
 
@@ -544,33 +608,21 @@ export class BlurifyCanvasEngine {
     const rh = restoreBox.maxY - restoreBox.minY;
     if (rw <= 0 || rh <= 0) return;
 
-    this.workMaskCtx.save();
-    this.workMaskCtx.beginPath();
-    this.workMaskCtx.rect(restoreBox.minX, restoreBox.minY, rw, rh);
-    this.workMaskCtx.clip();
-
-    this.workMaskCtx.clearRect(restoreBox.minX, restoreBox.minY, rw, rh);
-    this.workMaskCtx.drawImage(
-      this.maskCanvas,
-      restoreBox.minX,
-      restoreBox.minY,
-      rw,
-      rh,
-      restoreBox.minX,
-      restoreBox.minY,
-      rw,
-      rh
-    );
-
     const cw = curBox.maxX - curBox.minX;
     const ch = curBox.maxY - curBox.minY;
+
+    // 1. Update featheredStrokeCanvas inside restoreBox
+    const fCtx = this.featheredStrokeCtx;
+    fCtx.save();
+    fCtx.beginPath();
+    fCtx.rect(restoreBox.minX, restoreBox.minY, rw, rh);
+    fCtx.clip();
+    fCtx.clearRect(restoreBox.minX, restoreBox.minY, rw, rh);
+
     if (cw > 0 && ch > 0) {
-      this.workMaskCtx.globalCompositeOperation =
-        this.activeAction === 'erase' ? 'destination-out' : 'source-over';
       if (this.strokeBlurRadius > 0) {
-        this.workMaskCtx.filter = `blur(${this.strokeBlurRadius}px)`;
+        fCtx.filter = `blur(${this.strokeBlurRadius}px)`;
       }
-      // Expand source sample by pad so Gaussian blur at curBox edges sees neighboring pixels
       const srcMinX = clamp(curBox.minX - pad, 0, w);
       const srcMinY = clamp(curBox.minY - pad, 0, h);
       const srcMaxX = clamp(curBox.maxX + pad, 0, w);
@@ -578,7 +630,7 @@ export class BlurifyCanvasEngine {
       const srcW = srcMaxX - srcMinX;
       const srcH = srcMaxY - srcMinY;
       if (srcW > 0 && srcH > 0) {
-        this.workMaskCtx.drawImage(
+        fCtx.drawImage(
           this.tempMaskCanvas,
           srcMinX,
           srcMinY,
@@ -590,10 +642,94 @@ export class BlurifyCanvasEngine {
           srcH
         );
       }
-      this.workMaskCtx.filter = 'none';
+      fCtx.filter = 'none';
+    }
+    fCtx.restore();
+
+    // 2. Composite previous redactedCanvas + active stroke patch inside restoreBox
+    const wCtx = this.workRedactedCtx;
+    wCtx.save();
+    wCtx.beginPath();
+    wCtx.rect(restoreBox.minX, restoreBox.minY, rw, rh);
+    wCtx.clip();
+
+    wCtx.clearRect(restoreBox.minX, restoreBox.minY, rw, rh);
+    wCtx.globalCompositeOperation = 'source-over';
+    wCtx.drawImage(
+      this.redactedCanvas,
+      restoreBox.minX,
+      restoreBox.minY,
+      rw,
+      rh,
+      restoreBox.minX,
+      restoreBox.minY,
+      rw,
+      rh
+    );
+
+    if (cw > 0 && ch > 0) {
+      if (this.activeAction === 'erase') {
+        wCtx.globalCompositeOperation = 'destination-out';
+        wCtx.drawImage(
+          this.featheredStrokeCanvas,
+          curBox.minX,
+          curBox.minY,
+          cw,
+          ch,
+          curBox.minX,
+          curBox.minY,
+          cw,
+          ch
+        );
+      } else {
+        const pCtx = this.strokePatchCtx;
+        pCtx.save();
+        pCtx.beginPath();
+        pCtx.rect(curBox.minX, curBox.minY, cw, ch);
+        pCtx.clip();
+        pCtx.clearRect(curBox.minX, curBox.minY, cw, ch);
+        pCtx.globalCompositeOperation = 'source-over';
+        pCtx.drawImage(
+          this.effectCanvas,
+          curBox.minX,
+          curBox.minY,
+          cw,
+          ch,
+          curBox.minX,
+          curBox.minY,
+          cw,
+          ch
+        );
+        pCtx.globalCompositeOperation = 'destination-in';
+        pCtx.drawImage(
+          this.featheredStrokeCanvas,
+          curBox.minX,
+          curBox.minY,
+          cw,
+          ch,
+          curBox.minX,
+          curBox.minY,
+          cw,
+          ch
+        );
+        pCtx.restore();
+
+        wCtx.globalCompositeOperation = 'source-over';
+        wCtx.drawImage(
+          this.strokePatchCanvas,
+          curBox.minX,
+          curBox.minY,
+          cw,
+          ch,
+          curBox.minX,
+          curBox.minY,
+          cw,
+          ch
+        );
+      }
     }
 
-    this.workMaskCtx.restore();
+    wCtx.restore();
     this.prevClippedBounds = curBox;
   }
 
@@ -605,7 +741,7 @@ export class BlurifyCanvasEngine {
   ): void {
     if (!this.hasLoadedImage || cssWidth <= 0 || cssHeight <= 0) return;
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const targetW = Math.max(1, Math.round(cssWidth * dpr));
     const targetH = Math.max(1, Math.round(cssHeight * dpr));
 
@@ -633,12 +769,12 @@ export class BlurifyCanvasEngine {
     const imgH = this.origCanvas.height;
     const crispPixels = transform.scale >= 2.5;
 
-    // 1. Subtle canvas elevation shadow + original image
+    // 1. Neutral canvas elevation shadow + original image
     ctx.save();
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
-    ctx.shadowBlur = 28;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+    ctx.shadowBlur = 24;
     ctx.shadowOffsetY = 8;
-    ctx.fillStyle = '#090c10';
+    ctx.fillStyle = '#0f0f10';
     ctx.fillRect(
       transform.x,
       transform.y,
@@ -654,38 +790,20 @@ export class BlurifyCanvasEngine {
     ctx.drawImage(this.origCanvas, 0, 0);
     ctx.restore();
 
-    const activeMask = this.isDrawing ? this.workMaskCanvas : this.maskCanvas;
+    const activeRedacted = this.isDrawing
+      ? this.workRedactedCanvas
+      : this.redactedCanvas;
 
-    // 2. Masked blur / pixelate composite layer (skipped while holding Compare Original)
+    // 2. Baked redaction composite layer (skipped while holding Compare Original)
     if (!compareOriginal) {
-      layerCtx.save();
-      layerCtx.setTransform(1, 0, 0, 1, 0, 0);
-      layerCtx.clearRect(0, 0, targetW, targetH);
-
-      layerCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      layerCtx.save();
-      layerCtx.translate(transform.x, transform.y);
-      layerCtx.scale(transform.scale, transform.scale);
-      layerCtx.imageSmoothingEnabled =
-        settings.effectType === 'pixelate' ? false : !crispPixels;
-      layerCtx.drawImage(this.effectCanvas, 0, 0);
-      layerCtx.restore();
-
-      layerCtx.globalCompositeOperation = 'destination-in';
-      layerCtx.save();
-      layerCtx.translate(transform.x, transform.y);
-      layerCtx.scale(transform.scale, transform.scale);
-      layerCtx.imageSmoothingEnabled = true;
-      layerCtx.drawImage(activeMask, 0, 0);
-      layerCtx.restore();
-      layerCtx.restore();
-
       ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.drawImage(this.screenLayerCanvas, 0, 0);
+      ctx.translate(transform.x, transform.y);
+      ctx.scale(transform.scale, transform.scale);
+      ctx.imageSmoothingEnabled = !crispPixels;
+      ctx.drawImage(activeRedacted, 0, 0);
       ctx.restore();
 
-      // 3. Optional tinted mask overlay
+      // 3. Optional tinted mask coverage overlay
       if (settings.overlayEnabled) {
         layerCtx.save();
         layerCtx.setTransform(1, 0, 0, 1, 0, 0);
@@ -697,7 +815,7 @@ export class BlurifyCanvasEngine {
         layerCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
         layerCtx.translate(transform.x, transform.y);
         layerCtx.scale(transform.scale, transform.scale);
-        layerCtx.drawImage(activeMask, 0, 0);
+        layerCtx.drawImage(activeRedacted, 0, 0);
         layerCtx.restore();
 
         ctx.save();
@@ -742,8 +860,8 @@ export class BlurifyCanvasEngine {
     const inv = 1 / transform.scale;
     const accent =
       this.activeAction === 'erase'
-        ? 'rgba(248, 113, 113, 0.95)'
-        : 'rgba(56, 189, 248, 0.95)';
+        ? 'rgba(229, 72, 77, 0.95)'
+        : 'rgba(237, 237, 237, 0.95)';
 
     if (this.activeTool === 'brush' && this.activeShiftStraight) {
       ctx.strokeStyle = accent;
@@ -885,7 +1003,7 @@ export class BlurifyCanvasEngine {
       // Center dot
       ctx.beginPath();
       ctx.arc(hoverImgPos.x, hoverImgPos.y, 1.75 * inv, 0, Math.PI * 2);
-      ctx.fillStyle = isErase ? '#f87171' : '#38bdf8';
+      ctx.fillStyle = isErase ? '#e5484d' : '#ededed';
       ctx.fill();
     } else if (settings.tool === 'rect' || settings.tool === 'ellipse') {
       // Subtle angled crosshair showing active shape rotation angle
@@ -926,16 +1044,7 @@ export class BlurifyCanvasEngine {
       fCtx.fillRect(0, 0, w, h);
     }
     fCtx.drawImage(this.origCanvas, 0, 0);
-
-    const maskedEffect = document.createElement('canvas');
-    maskedEffect.width = w;
-    maskedEffect.height = h;
-    const mCtx = maskedEffect.getContext('2d')!;
-    mCtx.drawImage(this.effectCanvas, 0, 0);
-    mCtx.globalCompositeOperation = 'destination-in';
-    mCtx.drawImage(this.maskCanvas, 0, 0);
-
-    fCtx.drawImage(maskedEffect, 0, 0);
+    fCtx.drawImage(this.redactedCanvas, 0, 0);
 
     return new Promise((resolve) => {
       finalCanvas.toBlob((blob) => resolve(blob), format, quality);

@@ -4,6 +4,7 @@ import {
   Brush,
   Circle,
   Hand,
+  SlidersHorizontal,
   Square,
 } from 'lucide-react';
 import type { ToolType } from '../types/editor';
@@ -14,11 +15,16 @@ interface ToolRailProps {
   onSelectTool: (tool: ToolType) => void;
 }
 
+interface MobileToolBarProps extends ToolRailProps {
+  isInspectorOpen: boolean;
+  onToggleInspector: () => void;
+}
+
 interface ToolItem {
   id: ToolType;
   label: string;
   shortcut: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
 }
 
 const TOOLS: ToolItem[] = [
@@ -37,7 +43,7 @@ export const DesktopToolRail: React.FC<ToolRailProps> = ({
   return (
     <aside
       aria-label="편집 도구 모음"
-      className="hidden md:flex flex-col items-center w-[72px] bg-[#11151E] border-r border-slate-800/80 py-3 gap-1.5 shrink-0 z-30"
+      className="flex flex-col items-center w-16 bg-[#0f0f10] border-r border-[#ededed]/[0.08] py-3 gap-1 shrink-0 z-30"
     >
       {TOOLS.map((tool, index) => {
         const Icon = tool.icon;
@@ -45,7 +51,10 @@ export const DesktopToolRail: React.FC<ToolRailProps> = ({
         return (
           <React.Fragment key={tool.id}>
             {index === 1 && (
-              <div className="w-8 h-px bg-slate-800 my-1" aria-hidden="true" />
+              <div
+                className="w-8 h-px bg-[#ededed]/[0.08] my-1"
+                aria-hidden="true"
+              />
             )}
             <button
               type="button"
@@ -54,14 +63,14 @@ export const DesktopToolRail: React.FC<ToolRailProps> = ({
               title={`${tool.label} (${tool.shortcut})`}
               aria-label={`${tool.label} 도구`}
               aria-pressed={isActive}
-              className={`w-13 h-13 rounded-xl flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer disabled:opacity-35 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/70 ${
+              className={`w-12 h-12 rounded-lg flex flex-col items-center justify-center gap-1 transition-colors duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] cursor-pointer disabled:opacity-30 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6] ${
                 isActive
-                  ? 'bg-sky-500/15 text-sky-400 border border-sky-500/35'
-                  : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 border border-transparent'
+                  ? 'surface-active text-[#ededed] border border-[#ededed]/[0.10]'
+                  : 'text-[#85858b] hover:text-[#ededed] hover:bg-[#19191b] border border-transparent'
               }`}
             >
-              <Icon className="w-5 h-5" />
-              <span className="text-[11px] font-medium leading-none whitespace-nowrap">
+              <Icon size={18} strokeWidth={1.5} />
+              <span className="text-[11px] font-normal leading-none whitespace-nowrap">
                 {tool.label}
               </span>
             </button>
@@ -72,15 +81,17 @@ export const DesktopToolRail: React.FC<ToolRailProps> = ({
   );
 };
 
-export const MobileToolBar: React.FC<ToolRailProps> = ({
+export const MobileToolBar: React.FC<MobileToolBarProps> = ({
   activeTool,
   disabled,
+  isInspectorOpen,
   onSelectTool,
+  onToggleInspector,
 }) => {
   return (
     <nav
       aria-label="모바일 편집 도구 모음"
-      className="md:hidden h-16 bg-[#11151E]/95 backdrop-blur-md border-t border-slate-800/80 grid grid-cols-5 items-center px-2 shrink-0 z-50"
+      className="h-16 bg-[#0f0f10] border-t border-[#ededed]/[0.08] grid grid-cols-6 items-center px-1.5 shrink-0 z-50"
     >
       {TOOLS.map((tool) => {
         const Icon = tool.icon;
@@ -93,19 +104,37 @@ export const MobileToolBar: React.FC<ToolRailProps> = ({
             onClick={() => onSelectTool(tool.id)}
             aria-label={`${tool.label} 도구`}
             aria-pressed={isActive}
-            className={`min-h-[48px] min-w-[48px] mx-auto px-2 rounded-xl flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer disabled:opacity-35 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/70 ${
+            className={`h-12 min-w-[44px] w-full max-w-[60px] mx-auto px-1 rounded-lg flex flex-col items-center justify-center gap-1 transition-colors duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] cursor-pointer disabled:opacity-30 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6] ${
               isActive
-                ? 'text-sky-400 bg-sky-500/15'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'surface-active text-[#ededed] border border-[#ededed]/[0.10]'
+                : 'text-[#85858b] hover:text-[#ededed] border border-transparent'
             }`}
           >
-            <Icon className="w-5 h-5" />
-            <span className="text-[10px] font-medium leading-none whitespace-nowrap">
+            <Icon size={18} strokeWidth={1.5} />
+            <span className="text-[11px] font-normal leading-none whitespace-nowrap">
               {tool.label}
             </span>
           </button>
         );
       })}
+
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={onToggleInspector}
+        aria-label="세부 설정 열기"
+        aria-expanded={isInspectorOpen}
+        className={`relative h-12 min-w-[44px] w-full max-w-[60px] mx-auto px-1 rounded-lg flex flex-col items-center justify-center gap-1 transition-colors duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] cursor-pointer disabled:opacity-30 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3b82f6] ${
+          isInspectorOpen
+            ? 'bg-[#232325] text-[#ededed] border border-[#3b82f6]/50'
+            : 'text-[#a1a1a6] hover:text-[#ededed] border border-transparent'
+        }`}
+      >
+        <SlidersHorizontal size={18} strokeWidth={1.5} />
+        <span className="text-[11px] font-normal leading-none whitespace-nowrap">
+          조절
+        </span>
+      </button>
     </nav>
   );
 };

@@ -221,3 +221,51 @@ export function computePixelateParams(
     rows: Math.max(1, Math.round(imgH / blockSize)),
   };
 }
+
+export interface RgbaPixel {
+  r: number;
+  g: number;
+  b: number;
+  a: number; // 0..1
+}
+
+/**
+ * Pure Porter-Duff per-pixel redaction compositing model matching `redactedCanvas`:
+ * - `draw`: `source-over` of `(effectRgb, strokeAlpha)` onto `prevRedacted`
+ * - `erase`: `destination-out` of `strokeAlpha` from `prevRedacted`
+ */
+export function compositeRedactionPixel(
+  prevRedacted: RgbaPixel,
+  effectRgb: { r: number; g: number; b: number },
+  strokeAlpha: number,
+  action: 'draw' | 'erase'
+): RgbaPixel {
+  const sa = clamp(strokeAlpha, 0, 1);
+  if (sa === 0) {
+    return { ...prevRedacted };
+  }
+
+  if (action === 'erase') {
+    const outA = prevRedacted.a * (1 - sa);
+    if (outA <= 1e-9) {
+      return { r: 0, g: 0, b: 0, a: 0 };
+    }
+    return {
+      r: prevRedacted.r,
+      g: prevRedacted.g,
+      b: prevRedacted.b,
+      a: outA,
+    };
+  }
+
+  const outA = sa + prevRedacted.a * (1 - sa);
+  if (outA <= 1e-9) {
+    return { r: 0, g: 0, b: 0, a: 0 };
+  }
+  return {
+    r: (effectRgb.r * sa + prevRedacted.r * prevRedacted.a * (1 - sa)) / outA,
+    g: (effectRgb.g * sa + prevRedacted.g * prevRedacted.a * (1 - sa)) / outA,
+    b: (effectRgb.b * sa + prevRedacted.b * prevRedacted.a * (1 - sa)) / outA,
+    a: outA,
+  };
+}

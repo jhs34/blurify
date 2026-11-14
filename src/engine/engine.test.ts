@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  compositeRedactionPixel,
   computeBlurPipelineParams,
   computeFitTransform,
   computePixelateParams,
@@ -150,4 +151,36 @@ test('HistoryManager handles undo, redo, branching, and max capacity', () => {
   assert.equal(history.undo(), 's1');
   assert.equal(history.canUndo, false);
   assert.equal(history.redo(), 's3');
+});
+
+test('compositeRedactionPixel keeps already-painted strokes unchanged when strength changes and blends overlaps associatively', () => {
+  const empty = { r: 0, g: 0, b: 0, a: 0 };
+  const orig = { r: 240, g: 220, b: 200 };
+  const blur30 = { r: 180, g: 170, b: 160 };
+  const blur90 = { r: 60, g: 55, b: 50 };
+
+  // Paint stroke 1 on pixel A with blur 30% (feathered alpha 0.6)
+  const pixelA_afterStroke1 = compositeRedactionPixel(empty, blur30, 0.6, 'draw');
+
+  // Changing strength to 90% and painting elsewhere (strokeAlpha = 0 at pixel A) leaves pixel A 100% identical
+  const pixelA_afterStrengthChange = compositeRedactionPixel(
+    pixelA_afterStroke1,
+    blur90,
+    0,
+    'draw'
+  );
+  assert.deepEqual(pixelA_afterStrengthChange, pixelA_afterStroke1);
+
+  // Overlapping stroke 2 with blur 90% (alpha 0.5) on pixel A matches sequential layer composite over orig
+  const overlapped = compositeRedactionPixel(pixelA_afterStroke1, blur90, 0.5, 'draw');
+  const screenFromRedacted =
+    overlapped.r * overlapped.a + orig.r * (1 - overlapped.a);
+
+  const afterLayer1 = blur30.r * 0.6 + orig.r * 0.4;
+  const afterLayer2 = blur90.r * 0.5 + afterLayer1 * 0.5;
+  assert.ok(Math.abs(screenFromRedacted - afterLayer2) < 1e-9);
+
+  // Erasing fully restores transparent redaction (revealing sharp orig underneath)
+  const erased = compositeRedactionPixel(overlapped, blur90, 1, 'erase');
+  assert.equal(erased.a, 0);
 });

@@ -5,6 +5,27 @@
   :root {
     --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
     --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    /* Graphite neutral darkroom ramp */
+    --bg-deep: #0f0f10;
+    --bg-canvas: #141415;
+    --bg-card: #19191b;
+    --bg-raised: #232325;
+    --bg-hover: #2a2a2d;
+    --hairline: rgba(237, 237, 237, 0.08);
+    --hairline-strong: rgba(237, 237, 237, 0.14);
+
+    /* Three strict text roles */
+    --text-primary: #ededed;
+    --text-secondary: #a1a1a6;
+    --text-muted: #85858b;
+
+    /* Restrained semantic & optic accents */
+    --accent: #3b82f6;
+    --danger: #e5484d;
+
+    /* Single easing curve */
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   * {
@@ -19,6 +40,8 @@
     width: 100%;
     overflow: hidden;
     overscroll-behavior: none;
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
     font-family: var(--font-sans);
     word-break: keep-all;
     overflow-wrap: break-word;
@@ -31,13 +54,38 @@
 }
 
 .workspace-grid {
-  touch-action: none;
-  background-color: #0b0e14;
-  background-image: radial-gradient(rgba(148, 163, 184, 0.12) 1px, transparent 1px);
+  background-color: var(--bg-canvas);
+  background-image: radial-gradient(rgba(237, 237, 237, 0.06) 1px, transparent 1px);
   background-size: 20px 20px;
 }
 
-/* Precision studio slider styling */
+@layer components {
+  .keycap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 4px;
+    background-color: var(--bg-card);
+    border: 1px solid var(--hairline-strong);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    line-height: 1;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .surface-active {
+    background-color: var(--bg-raised);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+}
+
+/* Precision 4px-grid studio slider */
 input[type="range"].studio-slider {
   -webkit-appearance: none;
   appearance: none;
@@ -53,50 +101,53 @@ input[type="range"].studio-slider:focus {
 
 input[type="range"].studio-slider::-webkit-slider-runnable-track {
   width: 100%;
-  height: 5px;
-  border-radius: 9999px;
-  background: #1e293b;
-  border: 1px solid rgba(148, 163, 184, 0.15);
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline);
 }
 
 input[type="range"].studio-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  height: 18px;
-  width: 18px;
+  height: 16px;
+  width: 16px;
   border-radius: 50%;
-  background: #f8fafc;
-  border: 2px solid #0ea5e9;
+  background: var(--text-primary);
+  border: 1px solid rgba(0, 0, 0, 0.35);
   margin-top: -7px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
-  transition: transform 120ms cubic-bezier(0.16, 1, 0.3, 1), background-color 120ms ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  transition: transform 150ms var(--ease-out), background-color 150ms var(--ease-out);
 }
 
 input[type="range"].studio-slider:hover::-webkit-slider-thumb {
-  transform: scale(1.08);
   background: #ffffff;
 }
 
+input[type="range"].studio-slider:active::-webkit-slider-thumb {
+  transform: scale(0.95);
+}
+
 input[type="range"].studio-slider:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.35);
+  box-shadow: 0 0 0 2px var(--bg-deep), 0 0 0 4px var(--accent);
 }
 
 input[type="range"].studio-slider::-moz-range-track {
   width: 100%;
-  height: 5px;
-  border-radius: 9999px;
-  background: #1e293b;
-  border: 1px solid rgba(148, 163, 184, 0.15);
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-raised);
+  border: 1px solid var(--hairline);
 }
 
 input[type="range"].studio-slider::-moz-range-thumb {
-  height: 18px;
-  width: 18px;
+  height: 16px;
+  width: 16px;
   border-radius: 50%;
-  background: #f8fafc;
-  border: 2px solid #0ea5e9;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
-  transition: transform 120ms cubic-bezier(0.16, 1, 0.3, 1);
+  background: var(--text-primary);
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  transition: transform 150ms var(--ease-out), background-color 150ms var(--ease-out);
 }
 
 .no-scrollbar::-webkit-scrollbar {
