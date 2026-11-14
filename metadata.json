@@ -1,0 +1,6 @@
+{
+  "name": "Blurify",
+  "description": "브러쉬, 회전 도형, 선형 그라디언트 마스크와 정밀 페더를 지원하는 이미지 블러 및 픽셀 모자이크 편집 스튜디오",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

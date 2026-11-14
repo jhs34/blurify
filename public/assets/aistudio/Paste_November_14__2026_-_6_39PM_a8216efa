@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Blurify</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            overscroll-behavior: none;
+            height: 100dvh;
+        }
+
+        #workspace {
+            touch-action: none;
+            background-image:
+                linear-gradient(45deg, #1f2937 25%, transparent 25%),
+                linear-gradient(-45deg, #1f2937 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #1f2937 75%),
+                linear-gradient(-45deg, transparent 75%, #1f2937 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #ffffff;
+            cursor: pointer;
+            margin-top: -8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #4b5563;
+            border-radius: 2px;
+        }
+
+        input[type=range]:focus {
+            outline: none;
+        }
+
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        .bottom-sheet {
+            transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s ease;
+        }
+
+        .panel-transparent {
+            opacity: 0.2 !important;
+        }
+    </style>
+</head>
+
+<body class="bg-black text-gray-100 fixed inset-0 w-full overflow-hidden flex flex-col font-sans select-none">
+
+    <!-- 상단 헤더 -->
+    <header
+        class="h-14 bg-gray-900/90 backdrop-blur border-b border-gray-800 flex justify-between items-center px-3 sm:px-4 shrink-0 z-40 pt-[env(safe-area-inset-top)]">
+        <div class="flex-1">
+            <label class="cursor-pointer text-gray-300 hover:text-white transition flex items-center gap-1.5 p-1 w-max">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+                </svg>
+                <span class="text-sm font-medium hidden sm:inline">열기</span>
+                <input type="file" id="fileInput" accept="image/*" class="hidden">
+            </label>
+        </div>
+        <div class="flex items-center gap-1 sm:gap-3 flex-shrink-0">
+            <button id="undoBtn"
+                class="p-2 text-gray-300 hover:text-white transition disabled:opacity-20 disabled:pointer-events-none"
+                disabled title="실행 취소 (Ctrl+Z)">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"></path>
+                </svg>
+            </button>
+            <button id="redoBtn"
+                class="p-2 text-gray-300 hover:text-white transition disabled:opacity-20 disabled:pointer-events-none"
+                disabled title="다시 실행 (Ctrl+Y)">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6"></path>
+                </svg>
+            </button>
+        </div>
+        <div class="flex-1 flex justify-end items-center gap-2 sm:gap-4">
+            <button id="fitBtn" class="text-gray-400 hover:text-white p-1" title="화면에 맞추기">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4">
+                    </path>
+                </svg>
+            </button>
+            <button id="saveBtn"
+                class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded-full text-sm font-bold transition disabled:opacity-50 disabled:bg-gray-700">
+                저장
+            </button>
+        </div>
+    </header>
+
+    <!-- 메인 워크스페이스 -->
+    <main id="workspace" class="flex-1 relative w-full bg-gray-900 overflow-hidden">
+        <div id="emptyState"
+            class="absolute inset-0 flex flex-col items-center justify-center text-gray-500 z-10 pointer-events-none">
+            <svg class="w-16 h-16 mb-4 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z">
+                </path>
+            </svg>
+            <p class="text-sm">사진을 열어 편집을 시작하세요</p>
+        </div>
+        <canvas id="screenCanvas" class="absolute inset-0 w-full h-full hidden"></canvas>
+
+        <!-- 도구 프리뷰 오버레이 -->
+        <div id="toolPreview"
+            class="absolute top-1/2 left-1/2 pointer-events-none opacity-0 transition-opacity duration-300 z-30 flex items-center justify-center drop-shadow-md">
+            <div id="previewOuter" class="absolute border border-white/80 bg-white/10"></div>
+            <div id="previewInner" class="absolute border border-white/90 border-dashed"></div>
+            <div class="absolute w-1 h-1 bg-white rounded-full"></div>
+        </div>
+    </main>
+
+    <!-- 하단 설정 패널 -->
+    <div id="settingsPanel"
+        class="bottom-sheet absolute bottom-[4.5rem] sm:bottom-16 left-0 w-full bg-gray-800/95 backdrop-blur-md rounded-t-2xl shadow-[0_-4px_20px_rgba(0,0,0,0.5)] z-40 transform translate-y-[120%] pb-4 opacity-100">
+        <div class="flex justify-center p-2 cursor-pointer" id="closeSettingsDrag">
+            <div class="w-12 h-1.5 bg-gray-600 rounded-full"></div>
+        </div>
+        <div class="px-6 py-2 space-y-6">
+
+            <div id="sizeGroup">
+                <div class="flex justify-between text-xs text-gray-400 mb-2">
+                    <span id="sizeLabel">브러쉬 크기 (Ctrl+휠)</span>
+                    <span id="sizeVal">80</span>
+                </div>
+                <input type="range" id="sizeSlider" min="5" max="300" value="80">
+            </div>
+
+            <div id="featherGroup">
+                <div class="flex justify-between text-xs text-gray-400 mb-2">
+                    <span id="featherLabel">페더 (Shift+휠)</span>
+                    <span id="featherVal">30</span>
+                </div>
+                <input type="range" id="featherSlider" min="0" max="100" value="30">
+            </div>
+
+            <div id="angleGroup" style="display: none;">
+                <div class="flex justify-between text-xs text-gray-400 mb-2">
+                    <span id="angleLabel">도형 회전 (Alt+휠)</span>
+                    <span id="angleVal">0°</span>
+                </div>
+                <input type="range" id="angleSlider" min="0" max="360" value="0">
+            </div>
+
+            <div id="blurGroup">
+                <div class="flex justify-between text-xs text-gray-400 mb-2">
+                    <span>모자이크(블러) 강도</span>
+                    <span id="blurVal">25</span>
+                </div>
+                <input type="range" id="blurSlider" min="0" max="100" value="25">
+            </div>
+
+            <!-- 마스크 오버레이 설정 -->
+            <div id="overlayGroup" class="flex justify-between items-center pt-2 mt-4 border-t border-gray-700">
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="overlayToggle"
+                        class="w-4 h-4 cursor-pointer accent-blue-500 bg-gray-700 border-gray-600 rounded">
+                    <label for="overlayToggle" class="text-xs text-gray-400 cursor-pointer select-none">마스크 색상 표시 (단축키:
+                        O)</label>
+                </div>
+                <div class="flex items-center gap-2">
+                    <input type="color" id="overlayColorPicker" value="#ff0000"
+                        class="w-6 h-6 border-0 rounded cursor-pointer bg-transparent p-0" title="오버레이 색상 변경">
+                </div>
+            </div>
+
+            <!-- 마스크 액션 -->
+            <div class="flex justify-between items-center pt-2 border-t border-gray-700">
+                <div class="flex bg-gray-900 rounded-lg p-1">
+                    <button id="actionDraw"
+                        class="px-4 py-1.5 text-sm rounded-md bg-white text-black font-bold shadow-sm transition">칠하기</button>
+                    <button id="actionErase"
+                        class="px-4 py-1.5 text-sm rounded-md text-gray-400 hover:text-white transition">지우개</button>
+                </div>
+                <button id="clearMaskBtn" class="text-sm text-red-400 hover:text-red-300 px-2 py-1">전체 지우기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 하단 툴바 -->
+    <footer
+        class="h-[4.5rem] sm:h-16 bg-gray-900 border-t border-gray-800 flex shrink-0 z-50 pb-[env(safe-area-inset-bottom)]">
+        <div
+            class="flex-1 h-16 overflow-x-auto no-scrollbar flex items-center justify-around sm:justify-center px-4 sm:gap-6">
+            <button class="tool-btn active flex flex-col items-center justify-center w-14 h-14 rounded-xl text-blue-400"
+                data-tool="move">
+                <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11">
+                    </path>
+                </svg>
+                <span class="text-[10px] font-medium">이동/확대</span>
+            </button>
+            <div class="w-px h-8 bg-gray-700"></div>
+            <button
+                class="tool-btn flex flex-col items-center justify-center w-14 h-14 rounded-xl text-gray-400 hover:text-gray-200"
+                data-tool="brush">
+                <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z">
+                    </path>
+                </svg>
+                <span class="text-[10px] font-medium">브러쉬</span>
+            </button>
+            <button
+                class="tool-btn flex flex-col items-center justify-center w-14 h-14 rounded-xl text-gray-400 hover:text-gray-200"
+                data-tool="linear">
+                <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h18v18H3z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12h18"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" stroke-dasharray="2 3"
+                        d="M3 16h18 M3 20h18" opacity="0.5"></path>
+                </svg>
+                <span class="text-[10px] font-medium">선형</span>
+            </button>
+            <!-- 직사각형 도구 -->
+            <button
+                class="tool-btn flex flex-col items-center justify-center w-14 h-14 rounded-xl text-gray-400 hover:text-gray-200"
+                data-tool="rect">
+                <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <rect x="3" y="5" width="18" height="14" rx="2" stroke-width="2"></rect>
+                </svg>
+                <span class="text-[10px] font-medium">직사각형</span>
+            </button>
+            <button
+                class="tool-btn flex flex-col items-center justify-center w-14 h-14 rounded-xl text-gray-400 hover:text-gray-200"
+                data-tool="ellipse">
+                <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <ellipse cx="12" cy="12" rx="10" ry="6" stroke-width="2"></ellipse>
+                </svg>
+                <span class="text-[10px] font-medium">타원</span>
+            </button>
+        </div>
+    </footer>
+
+    <script>
+        const workspace = document.getElementById('workspace');
+        const screenCanvas = document.getElementById('screenCanvas');
+        const screenCtx = screenCanvas.getContext('2d');
+        const saveBtn = document.getElementById('saveBtn');
+        const emptyState = document.getElementById('emptyState');
+        const settingsPanel = document.getElementById('settingsPanel');
+
+        const toolPreview = document.getElementById('toolPreview');
+        const previewOuter = document.getElementById('previewOuter');
+        const previewInner = document.getElementById('previewInner');
+
+        const origCanvas = document.createElement('canvas');
+        const origCtx = origCanvas.getContext('2d');
+        const blurCanvas = document.createElement('canvas');
+        const blurCtx = blurCanvas.getContext('2d');
+        const maskCanvas = document.createElement('canvas');
+        const maskCtx = maskCanvas.getContext('2d');
+        const tempMaskCanvas = document.createElement('canvas');
+        const tempMaskCtx = tempMaskCanvas.getContext('2d');
+
+        const state = {
+            hasImage: false,
+            tool: 'move', action: 'draw',
+            blurStr: 25, size: 80, feather: 30, angle: 0,
+            isSettingsOpen: false,
+            overlayEnabled: false, overlayColor: '#ff0000',
+            transform: { x: 0, y: 0, scale: 1 },
+            isInteracting: false, maskModified: false,
+            lastPan: { x: 0, y: 0 }, lastPinchDist: 0,
+            startX: 0, startY: 0, lastDrawX: 0, lastDrawY: 0,
+            currentX: 0, currentY: 0,
+            strokeParams: { drawWidth: 0, blurRadius: 0 }
+        };
+
+        let historyStack = [];
+        let historyStep = -1;
+        let previewTimeout = null;
+        let isMiddlePanning = false; // 마우스 휠 클릭 패닝 상태
+
+        function saveHistory() {
+            if (historyStep < historyStack.length - 1) {
+                historyStack = historyStack.slice(0, historyStep + 1);
+            }
+            const snap = document.createElement('canvas');
+            snap.width = maskCanvas.width; snap.height = maskCanvas.height;
+            snap.getContext('2d').drawImage(maskCanvas, 0, 0);
+            historyStack.push(snap);
+            if (historyStack.length > 8) historyStack.shift();
+            else historyStep++;
+            updateHistoryUI();
+        }
+
+        function undo() {
+            if (historyStep > 0) {
+                historyStep--;
+                maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+                maskCtx.drawImage(historyStack[historyStep], 0, 0);
+                render();
+                updateHistoryUI();
+            }
+        }
+
+        function redo() {
+            if (historyStep < historyStack.length - 1) {
+                historyStep++;
+                maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+                maskCtx.drawImage(historyStack[historyStep], 0, 0);
+                render();
+                updateHistoryUI();
+            }
+        }
+
+        function updateHistoryUI() {
+            document.getElementById('undoBtn').disabled = historyStep <= 0;
+            document.getElementById('redoBtn').disabled = historyStep >= historyStack.length - 1;
+        }
+
+        function updateSliderValue(id, value, displayId, suffix = '') {
+            document.getElementById(id).value = value;
+            document.getElementById(displayId).textContent = value + suffix;
+        }
+
+        function init() {
+            new ResizeObserver(entries => {
+                screenCanvas.width = entries[0].contentRect.width;
+                screenCanvas.height = entries[0].contentRect.height;
+                if (state.hasImage) render();
+            }).observe(workspace);
+
+            document.getElementById('fileInput').addEventListener('change', handleUpload);
+            document.getElementById('saveBtn').addEventListener('click', saveImage);
+            document.getElementById('fitBtn').addEventListener('click', fitToScreen);
+            document.getElementById('undoBtn').addEventListener('click', undo);
+            document.getElementById('redoBtn').addEventListener('click', redo);
+
+            // 키보드 단축키 (Undo / Redo)
+            window.addEventListener('keydown', (e) => {
+                if (!state.hasImage) return;
+                if (e.ctrlKey || e.metaKey) {
+                    const key = e.key.toLowerCase();
+                    if (key === 'z') {
+                        e.preventDefault();
+                        if (e.shiftKey) redo();
+                        else undo();
+                    } else if (key === 'y') {
+                        e.preventDefault();
+                        redo();
+                    }
+                } else {
+                    const key = e.key.toLowerCase();
+                    if (key === 'o') {
+                        e.preventDefault();
+                        state.overlayEnabled = !state.overlayEnabled;
+                        document.getElementById('overlayToggle').checked = state.overlayEnabled;
+                        render();
+                    }
+                }
+            });
+
+            document.querySelectorAll('.tool-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const target = e.currentTarget;
+                    const clickedTool = target.dataset.tool;
+
+                    if (state.tool === clickedTool) {
+                        if (clickedTool !== 'move') toggleSettings(!state.isSettingsOpen);
+                    } else {
+                        document.querySelectorAll('.tool-btn').forEach(b => {
+                            b.classList.remove('text-blue-400'); b.classList.add('text-gray-400');
+                        });
+                        target.classList.remove('text-gray-400'); target.classList.add('text-blue-400');
+                        state.tool = clickedTool;
+
+                        if (clickedTool === 'move') {
+                            toggleSettings(false);
+                        } else {
+                            updateSettingsUI();
+                            toggleSettings(true);
+                        }
+                    }
+                });
+            });
+
+            document.getElementById('closeSettingsDrag').addEventListener('click', () => toggleSettings(false));
+            document.getElementById('clearMaskBtn').addEventListener('click', () => {
+                if (!state.hasImage) return;
+                maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+                saveHistory(); render();
+            });
+
+            const btnDraw = document.getElementById('actionDraw');
+            const btnErase = document.getElementById('actionErase');
+            btnDraw.addEventListener('click', () => {
+                state.action = 'draw';
+                btnDraw.className = "px-4 py-1.5 text-sm rounded-md bg-white text-black font-bold shadow-sm transition";
+                btnErase.className = "px-4 py-1.5 text-sm rounded-md text-gray-400 hover:text-white transition";
+            });
+            btnErase.addEventListener('click', () => {
+                state.action = 'erase';
+                btnErase.className = "px-4 py-1.5 text-sm rounded-md bg-white text-black font-bold shadow-sm transition";
+                btnDraw.className = "px-4 py-1.5 text-sm rounded-md text-gray-400 hover:text-white transition";
+            });
+
+            const makePanelTranslucent = () => settingsPanel.classList.add('panel-transparent');
+            const makePanelSolid = () => settingsPanel.classList.remove('panel-transparent');
+
+            const bindSlider = (id, stateKey, displayId, isPreviewTrigger = false, suffix = '') => {
+                const el = document.getElementById(id);
+                el.addEventListener('touchstart', makePanelTranslucent, { passive: true });
+                el.addEventListener('mousedown', makePanelTranslucent);
+                el.addEventListener('touchend', makePanelSolid);
+                el.addEventListener('mouseup', makePanelSolid);
+                el.addEventListener('touchcancel', makePanelSolid);
+
+                el.addEventListener('input', (e) => {
+                    state[stateKey] = parseInt(e.target.value);
+                    document.getElementById(displayId).textContent = state[stateKey] + suffix;
+                    if (isPreviewTrigger && state.tool !== 'linear' && state.tool !== 'move') {
+                        showToolPreview();
+                    }
+                });
+                return el;
+            };
+
+            bindSlider('sizeSlider', 'size', 'sizeVal', true);
+            bindSlider('featherSlider', 'feather', 'featherVal', true);
+            bindSlider('angleSlider', 'angle', 'angleVal', true, '°');
+            bindSlider('blurSlider', 'blurStr', 'blurVal').addEventListener('change', generateBlurredImage);
+
+            document.getElementById('overlayToggle').addEventListener('change', (e) => {
+                state.overlayEnabled = e.target.checked;
+                render();
+            });
+
+            document.getElementById('overlayColorPicker').addEventListener('input', (e) => {
+                state.overlayColor = e.target.value;
+                if (state.overlayEnabled) render();
+            });
+
+            workspace.addEventListener('mousedown', onPointerDown);
+            workspace.addEventListener('mousemove', onPointerMove);
+            window.addEventListener('mouseup', onPointerUp);
+            workspace.addEventListener('wheel', onWheel, { passive: false });
+
+            workspace.addEventListener('touchstart', onTouchStart, { passive: false });
+            workspace.addEventListener('touchmove', onTouchMove, { passive: false });
+            window.addEventListener('touchend', onTouchEnd);
+            window.addEventListener('touchcancel', onTouchEnd);
+        }
+
+        function toggleSettings(forceOpen) {
+            state.isSettingsOpen = forceOpen !== undefined ? forceOpen : !state.isSettingsOpen;
+            if (state.isSettingsOpen) settingsPanel.classList.remove('translate-y-[120%]');
+            else settingsPanel.classList.add('translate-y-[120%]');
+        }
+
+        function updateSettingsUI() {
+            const sizeGroup = document.getElementById('sizeGroup');
+            const featherGroup = document.getElementById('featherGroup');
+            const angleGroup = document.getElementById('angleGroup');
+            const sizeLabel = document.getElementById('sizeLabel');
+            const featherLabel = document.getElementById('featherLabel');
+
+            sizeGroup.style.display = 'block';
+            featherGroup.style.display = 'block';
+            angleGroup.style.display = 'none';
+
+            if (state.tool === 'brush') {
+                sizeLabel.textContent = '브러쉬 크기 (Ctrl+휠)';
+                featherLabel.textContent = '페더 (Shift+휠)';
+            } else if (state.tool === 'linear') {
+                sizeGroup.style.display = 'none';
+                featherGroup.style.display = 'none';
+            } else if (state.tool === 'rect' || state.tool === 'ellipse') {
+                sizeGroup.style.display = 'none';
+                featherLabel.textContent = '페더 (Shift+휠)';
+                angleGroup.style.display = 'block';
+            }
+        }
+
+        function getBrushImageSize() {
+            if (!state.hasImage) return state.size;
+            const baseFactor = Math.max(origCanvas.width, origCanvas.height) / 1000;
+            return state.size * baseFactor;
+        }
+
+        function showToolPreview() {
+            if (!state.hasImage || state.tool === 'move' || state.tool === 'linear') return;
+
+            let outerW, outerH, innerW, innerH, bRadius;
+            const F = state.feather / 100;
+
+            if (state.tool === 'brush') {
+                const S_screen = getBrushImageSize() * state.transform.scale;
+                outerW = outerH = S_screen;
+                innerW = innerH = S_screen * (1 - F);
+                bRadius = '50%';
+                toolPreview.style.transform = `translate(-50%, -50%) rotate(0deg)`;
+            } else if (state.tool === 'ellipse') {
+                const baseW = 240;
+                const baseH = 140;
+                outerW = baseW;
+                outerH = baseH;
+                innerW = baseW * (1 - F);
+                innerH = baseH * (1 - F);
+                bRadius = '50%';
+                toolPreview.style.transform = `translate(-50%, -50%) rotate(${state.angle}deg)`;
+            } else if (state.tool === 'rect') {
+                const baseW = 200;
+                const baseH = 140;
+                outerW = baseW;
+                outerH = baseH;
+                innerW = baseW * (1 - F);
+                innerH = baseH * (1 - F);
+                bRadius = '4px';
+                toolPreview.style.transform = `translate(-50%, -50%) rotate(${state.angle}deg)`;
+            }
+
+            previewOuter.style.width = outerW + 'px';
+            previewOuter.style.height = outerH + 'px';
+            previewOuter.style.borderRadius = bRadius;
+            previewInner.style.width = innerW + 'px';
+            previewInner.style.height = innerH + 'px';
+            previewInner.style.borderRadius = bRadius;
+
+            toolPreview.classList.remove('opacity-0');
+            clearTimeout(previewTimeout);
+            previewTimeout = setTimeout(() => toolPreview.classList.add('opacity-0'), 1000);
+        }
+
+        function handleUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const img = new Image();
+            img.onload = () => setupCanvases(img);
+            img.src = URL.createObjectURL(file);
+        }
+
+        function setupCanvases(img) {
+            state.hasImage = true;
+            let w = img.width;
+            let h = img.height;
+
+            [origCanvas, blurCanvas, maskCanvas, tempMaskCanvas].forEach(c => {
+                c.width = w; c.height = h;
+            });
+            origCtx.drawImage(img, 0, 0, w, h);
+            maskCtx.clearRect(0, 0, w, h);
+
+            historyStack = []; historyStep = -1;
+            saveHistory(); generateBlurredImage();
+
+            emptyState.classList.add('hidden');
+            screenCanvas.classList.remove('hidden');
+            saveBtn.disabled = false;
+            fitToScreen();
+        }
+
+        function generateBlurredImage() {
+            if (!state.hasImage) return;
+
+            const minSide = Math.min(origCanvas.width, origCanvas.height);
+            const blurRadius = (state.blurStr / 100) * (minSide * 0.05);
+
+            blurCtx.clearRect(0, 0, blurCanvas.width, blurCanvas.height);
+
+            if (blurRadius === 0) {
+                blurCtx.drawImage(origCanvas, 0, 0);
+                render();
+                return;
+            }
+
+            const scaleDown = 0.25;
+            const tempC = document.createElement('canvas');
+            tempC.width = origCanvas.width * scaleDown;
+            tempC.height = origCanvas.height * scaleDown;
+            const tCtx = tempC.getContext('2d');
+
+            tCtx.filter = `blur(${blurRadius * scaleDown}px)`;
+            tCtx.drawImage(origCanvas, 0, 0, tempC.width, tempC.height);
+            tCtx.filter = 'none';
+
+            blurCtx.drawImage(tempC, 0, 0, tempC.width, tempC.height, 0, 0, blurCanvas.width, blurCanvas.height);
+            render();
+        }
+
+        function fitToScreen() {
+            if (!state.hasImage) return;
+            const padding = 20;
+            const scale = Math.min((screenCanvas.width - padding * 2) / origCanvas.width, (screenCanvas.height - padding * 2) / origCanvas.height);
+            state.transform = { scale: scale, x: (screenCanvas.width - origCanvas.width * scale) / 2, y: (screenCanvas.height - origCanvas.height * scale) / 2 };
+            render();
+        }
+
+        function getCanvasPos(clientX, clientY) {
+            const rect = screenCanvas.getBoundingClientRect();
+            return { x: clientX - rect.left, y: clientY - rect.top };
+        }
+
+        function toImgPos(canvasX, canvasY) {
+            return {
+                x: (canvasX - state.transform.x) / state.transform.scale,
+                y: (canvasY - state.transform.y) / state.transform.scale
+            };
+        }
+
+        function onTouchStart(e) {
+            e.preventDefault();
+            if (!state.hasImage) return;
+            if (state.isSettingsOpen) toggleSettings(false);
+            const touches = Array.from(e.touches);
+
+            if (touches.length >= 2) {
+                if (state.isInteracting && state.tool !== 'move') {
+                    state.isInteracting = false; state.maskModified = false;
+                    tempMaskCtx.clearRect(0, 0, tempMaskCanvas.width, tempMaskCanvas.height);
+                    render();
+                }
+                const p1 = getCanvasPos(touches[0].clientX, touches[0].clientY);
+                const p2 = getCanvasPos(touches[1].clientX, touches[1].clientY);
+                state.lastPinchDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+                state.lastPan = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+            } else if (touches.length === 1) {
+                const pos = getCanvasPos(touches[0].clientX, touches[0].clientY);
+                handleInteractStart(pos.x, pos.y);
+            }
+        }
+
+        function onTouchMove(e) {
+            e.preventDefault();
+            if (!state.hasImage) return;
+            const touches = Array.from(e.touches);
+
+            if (touches.length >= 2) {
+                const p1 = getCanvasPos(touches[0].clientX, touches[0].clientY);
+                const p2 = getCanvasPos(touches[1].clientX, touches[1].clientY);
+                const currentDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+                const currentCenter = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+
+                if (state.lastPinchDist > 0) applyZoom(currentDist / state.lastPinchDist, currentCenter.x, currentCenter.y);
+                state.transform.x += currentCenter.x - state.lastPan.x;
+                state.transform.y += currentCenter.y - state.lastPan.y;
+                state.lastPinchDist = currentDist; state.lastPan = currentCenter;
+                render();
+            } else if (touches.length === 1 && state.isInteracting) {
+                const pos = getCanvasPos(touches[0].clientX, touches[0].clientY);
+                handleInteractMove(pos.x, pos.y);
+            }
+        }
+
+        function onTouchEnd(e) {
+            if (state.isInteracting) handleInteractEnd();
+            if (e.touches.length === 0) state.lastPinchDist = 0;
+        }
+
+        function onPointerDown(e) {
+            if (!state.hasImage || e.touches) return;
+            if (state.isSettingsOpen) toggleSettings(false);
+
+            // 마우스 휠(중간) 클릭 시 패닝(이동) 
+            if (e.button === 1) {
+                e.preventDefault();
+                isMiddlePanning = true;
+                state.lastPan = getCanvasPos(e.clientX, e.clientY);
+                return;
+            }
+
+            // 좌클릭 시 기존 도구 그리기
+            if (e.button === 0) {
+                const pos = getCanvasPos(e.clientX, e.clientY);
+                handleInteractStart(pos.x, pos.y);
+            }
+        }
+        function onPointerMove(e) {
+            if (!state.hasImage || e.touches) return;
+
+            if (isMiddlePanning) {
+                const pos = getCanvasPos(e.clientX, e.clientY);
+                state.transform.x += pos.x - state.lastPan.x;
+                state.transform.y += pos.y - state.lastPan.y;
+                state.lastPan = pos;
+                render();
+                return;
+            }
+
+            if (state.isInteracting) {
+                const pos = getCanvasPos(e.clientX, e.clientY);
+                handleInteractMove(pos.x, pos.y);
+            }
+        }
+        function onPointerUp(e) {
+            if (e.touches) return;
+            if (e.button === 1) {
+                isMiddlePanning = false;
+                return;
+            }
+            if (state.isInteracting && e.button === 0) {
+                handleInteractEnd();
+            }
+        }
+
+        // 데스크톱 휠 단축키
+        function onWheel(e) {
+            e.preventDefault();
+            if (!state.hasImage) return;
+            if (state.isSettingsOpen) toggleSettings(false);
+
+            // Ctrl + 휠: 브러쉬 크기 조절
+            if (e.ctrlKey || e.metaKey) {
+                if (state.tool === 'brush') {
+                    const delta = e.deltaY < 0 ? 5 : -5;
+                    state.size = Math.max(5, Math.min(300, state.size + delta));
+                    updateSliderValue('sizeSlider', state.size, 'sizeVal');
+                    showToolPreview();
+                }
+            }
+            // Shift + 휠: 페더 조절
+            else if (e.shiftKey) {
+                if (state.tool !== 'linear') {
+                    const delta = e.deltaY < 0 ? 2 : -2;
+                    state.feather = Math.max(0, Math.min(100, state.feather + delta));
+                    updateSliderValue('featherSlider', state.feather, 'featherVal');
+                    showToolPreview();
+                }
+            }
+            // Alt + 휠: 도형 회전 각도 조절
+            else if (e.altKey) {
+                if (state.tool === 'rect' || state.tool === 'ellipse') {
+                    const delta = e.deltaY < 0 ? 5 : -5;
+                    state.angle = (state.angle + delta + 360) % 360; // 0~359도 유지
+                    updateSliderValue('angleSlider', state.angle, 'angleVal', '°');
+                    showToolPreview();
+                }
+            }
+            // 단축키 없음: 확대/축소
+            else {
+                const pos = getCanvasPos(e.clientX, e.clientY);
+                applyZoom(e.deltaY < 0 ? 1.05 : 1 / 1.05, pos.x, pos.y);
+            }
+        }
+
+        function applyZoom(scaleChange, centerX, centerY) {
+            const newScale = Math.min(Math.max(state.transform.scale * scaleChange, 0.1), 10);
+            const actualScaleChange = newScale / state.transform.scale;
+            state.transform.x = centerX - (centerX - state.transform.x) * actualScaleChange;
+            state.transform.y = centerY - (centerY - state.transform.y) * actualScaleChange;
+            state.transform.scale = newScale;
+            render();
+        }
+
+        function handleInteractStart(canvasX, canvasY) {
+            state.isInteracting = true;
+            state.maskModified = false;
+
+            if (state.tool === 'move') {
+                state.lastPan = { x: canvasX, y: canvasY };
+            } else {
+                const imgPos = toImgPos(canvasX, canvasY);
+                state.startX = imgPos.x; state.startY = imgPos.y;
+                state.lastDrawX = imgPos.x; state.lastDrawY = imgPos.y;
+                state.currentX = imgPos.x; state.currentY = imgPos.y;
+
+                const S = getBrushImageSize();
+                const F = state.feather / 100;
+
+                if (state.tool === 'brush') {
+                    state.strokeParams = {
+                        drawWidth: S * (1 - F / 2),
+                        blurRadius: (S * F) / 4
+                    };
+                } else if (state.tool === 'linear') {
+                    state.strokeParams = { drawWidth: 0, blurRadius: 0 };
+                } else {
+                    state.strokeParams = {
+                        drawWidth: 0,
+                        blurRadius: (state.feather * (Math.max(origCanvas.width, origCanvas.height) / 1000)) * 0.5
+                    };
+                }
+
+                tempMaskCtx.clearRect(0, 0, tempMaskCanvas.width, tempMaskCanvas.height);
+                state.maskModified = true;
+
+                if (state.tool === 'brush') drawSolidStroke(imgPos.x, imgPos.y, true);
+            }
+        }
+
+        function handleInteractMove(canvasX, canvasY) {
+            if (state.tool === 'move') {
+                state.transform.x += canvasX - state.lastPan.x;
+                state.transform.y += canvasY - state.lastPan.y;
+                state.lastPan = { x: canvasX, y: canvasY };
+                render();
+            } else {
+                const imgPos = toImgPos(canvasX, canvasY);
+                state.currentX = imgPos.x;
+                state.currentY = imgPos.y;
+                if (state.tool === 'brush') drawSolidStroke(imgPos.x, imgPos.y, false);
+                else drawSolidShape(imgPos.x, imgPos.y);
+            }
+        }
+
+        function handleInteractEnd() {
+            state.isInteracting = false;
+
+            if (state.tool !== 'move') {
+                maskCtx.globalCompositeOperation = state.action === 'erase' ? 'destination-out' : 'source-over';
+
+                if (state.strokeParams.blurRadius > 0) {
+                    maskCtx.filter = `blur(${state.strokeParams.blurRadius}px)`;
+                }
+
+                maskCtx.drawImage(tempMaskCanvas, 0, 0);
+                maskCtx.filter = 'none';
+                maskCtx.globalCompositeOperation = 'source-over';
+
+                tempMaskCtx.clearRect(0, 0, tempMaskCanvas.width, tempMaskCanvas.height);
+                render();
+
+                if (state.maskModified) {
+                    saveHistory();
+                    state.maskModified = false;
+                }
+            }
+        }
+
+        function drawSolidStroke(x, y, isFirst) {
+            const ctx = tempMaskCtx;
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+            ctx.lineWidth = state.strokeParams.drawWidth;
+            ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff';
+
+            ctx.beginPath();
+            if (isFirst) {
+                ctx.arc(x, y, state.strokeParams.drawWidth / 2, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                ctx.moveTo(state.lastDrawX, state.lastDrawY);
+                ctx.lineTo(x, y);
+                ctx.stroke();
+            }
+
+            state.lastDrawX = x; state.lastDrawY = y;
+            render();
+        }
+
+        function drawSolidShape(currX, currY) {
+            tempMaskCtx.clearRect(0, 0, tempMaskCanvas.width, tempMaskCanvas.height);
+            const ctx = tempMaskCtx;
+            ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+            ctx.beginPath();
+            if (state.tool === 'linear') {
+                const dist = Math.hypot(currX - state.startX, currY - state.startY);
+                if (dist > 0.1) {
+                    const grad = ctx.createLinearGradient(state.startX, state.startY, currX, currY);
+                    grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+                    grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(0, 0, tempMaskCanvas.width, tempMaskCanvas.height);
+                }
+            } else {
+                ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff';
+
+                if (state.tool === 'rect') {
+                    const angle = state.angle * Math.PI / 180;
+                    const dx = currX - state.startX;
+                    const dy = currY - state.startY;
+
+                    const localX = dx * Math.cos(-angle) - dy * Math.sin(-angle);
+                    const localY = dx * Math.sin(-angle) + dy * Math.cos(-angle);
+
+                    const w = Math.abs(localX) * 2;
+                    const h = Math.abs(localY) * 2;
+
+                    ctx.save();
+                    ctx.translate(state.startX, state.startY);
+                    ctx.rotate(angle);
+                    ctx.rect(-w / 2, -h / 2, w, h);
+                    ctx.fill();
+                    ctx.restore();
+                } else if (state.tool === 'ellipse') {
+                    const angle = state.angle * Math.PI / 180;
+                    const dx = currX - state.startX;
+                    const dy = currY - state.startY;
+
+                    const localX = dx * Math.cos(-angle) - dy * Math.sin(-angle);
+                    const localY = dx * Math.sin(-angle) + dy * Math.cos(-angle);
+
+                    const rx = Math.abs(localX);
+                    const ry = Math.abs(localY);
+
+                    ctx.ellipse(state.startX, state.startY, rx, ry, angle, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            render();
+        }
+
+        function render() {
+            if (!state.hasImage) return;
+            screenCtx.clearRect(0, 0, screenCanvas.width, screenCanvas.height);
+
+            const screenMask = document.createElement('canvas');
+            screenMask.width = screenCanvas.width; screenMask.height = screenCanvas.height;
+            const smCtx = screenMask.getContext('2d');
+
+            smCtx.save();
+            smCtx.translate(state.transform.x, state.transform.y);
+            smCtx.scale(state.transform.scale, state.transform.scale);
+
+            smCtx.drawImage(maskCanvas, 0, 0);
+            if (state.isInteracting && state.tool !== 'move') {
+                smCtx.globalCompositeOperation = state.action === 'erase' ? 'destination-out' : 'source-over';
+                if (state.strokeParams.blurRadius > 0) smCtx.filter = `blur(${state.strokeParams.blurRadius}px)`;
+                smCtx.drawImage(tempMaskCanvas, 0, 0);
+                smCtx.filter = 'none';
+            }
+            smCtx.restore();
+
+            const screenBlur = document.createElement('canvas');
+            screenBlur.width = screenCanvas.width; screenBlur.height = screenCanvas.height;
+            const sbCtx = screenBlur.getContext('2d');
+
+            sbCtx.save();
+            sbCtx.translate(state.transform.x, state.transform.y);
+            sbCtx.scale(state.transform.scale, state.transform.scale);
+            sbCtx.drawImage(blurCanvas, 0, 0);
+            sbCtx.restore();
+
+            sbCtx.globalCompositeOperation = 'destination-in';
+            sbCtx.drawImage(screenMask, 0, 0);
+
+            screenCtx.save();
+            screenCtx.translate(state.transform.x, state.transform.y);
+            screenCtx.scale(state.transform.scale, state.transform.scale);
+            screenCtx.drawImage(origCanvas, 0, 0);
+            screenCtx.restore();
+
+            screenCtx.drawImage(screenBlur, 0, 0);
+
+            // 마스크 오버레이 표시
+            if (state.overlayEnabled) {
+                const overlayC = document.createElement('canvas');
+                overlayC.width = screenCanvas.width;
+                overlayC.height = screenCanvas.height;
+                const oCtx = overlayC.getContext('2d');
+
+                oCtx.fillStyle = state.overlayColor;
+                oCtx.fillRect(0, 0, overlayC.width, overlayC.height);
+
+                oCtx.globalCompositeOperation = 'destination-in';
+                oCtx.drawImage(screenMask, 0, 0);
+
+                screenCtx.save();
+                screenCtx.globalAlpha = 0.5; // 50% 투명도
+                screenCtx.drawImage(overlayC, 0, 0);
+                screenCtx.restore();
+            }
+
+            // 가이드라인 (실시간 프리뷰 선)
+            if (state.isInteracting && state.tool !== 'move' && state.tool !== 'brush') {
+                screenCtx.save();
+                screenCtx.translate(state.transform.x, state.transform.y);
+                screenCtx.scale(state.transform.scale, state.transform.scale);
+
+                screenCtx.strokeStyle = 'rgba(59, 130, 246, 0.9)';
+                screenCtx.lineWidth = 2 / state.transform.scale;
+                screenCtx.setLineDash([6 / state.transform.scale, 4 / state.transform.scale]);
+
+                screenCtx.beginPath();
+                if (state.tool === 'linear') {
+                    screenCtx.moveTo(state.startX, state.startY);
+                    screenCtx.lineTo(state.currentX, state.currentY);
+                    screenCtx.stroke();
+
+                    screenCtx.beginPath();
+                    screenCtx.arc(state.startX, state.startY, 5 / state.transform.scale, 0, Math.PI * 2);
+                    screenCtx.fillStyle = 'rgba(59, 130, 246, 0.9)';
+                    screenCtx.fill();
+
+                    screenCtx.beginPath();
+                    screenCtx.arc(state.currentX, state.currentY, 5 / state.transform.scale, 0, Math.PI * 2);
+                    screenCtx.fill();
+                } else if (state.tool === 'rect') {
+                    const angle = state.angle * Math.PI / 180;
+                    const dx = state.currentX - state.startX;
+                    const dy = state.currentY - state.startY;
+
+                    const localX = dx * Math.cos(-angle) - dy * Math.sin(-angle);
+                    const localY = dx * Math.sin(-angle) + dy * Math.cos(-angle);
+
+                    const w = Math.abs(localX) * 2;
+                    const h = Math.abs(localY) * 2;
+
+                    screenCtx.save();
+                    screenCtx.translate(state.startX, state.startY);
+                    screenCtx.rotate(angle);
+                    screenCtx.strokeRect(-w / 2, -h / 2, w, h);
+                    screenCtx.restore();
+                } else if (state.tool === 'ellipse') {
+                    const angle = state.angle * Math.PI / 180;
+                    const dx = state.currentX - state.startX;
+                    const dy = state.currentY - state.startY;
+
+                    const localX = dx * Math.cos(-angle) - dy * Math.sin(-angle);
+                    const localY = dx * Math.sin(-angle) + dy * Math.cos(-angle);
+
+                    const rx = Math.abs(localX);
+                    const ry = Math.abs(localY);
+
+                    screenCtx.ellipse(state.startX, state.startY, rx, ry, angle, 0, Math.PI * 2);
+                    screenCtx.stroke();
+                }
+                screenCtx.restore();
+            }
+        }
+
+        function saveImage() {
+            if (!state.hasImage) return;
+            saveBtn.disabled = true; saveBtn.textContent = "저장 중...";
+
+            setTimeout(() => {
+                const finalCanvas = document.createElement('canvas');
+                finalCanvas.width = origCanvas.width; finalCanvas.height = origCanvas.height;
+                const fCtx = finalCanvas.getContext('2d');
+
+                fCtx.drawImage(origCanvas, 0, 0);
+
+                const maskedBlurCanvas = document.createElement('canvas');
+                maskedBlurCanvas.width = origCanvas.width; maskedBlurCanvas.height = origCanvas.height;
+                const mbCtx = maskedBlurCanvas.getContext('2d');
+
+                mbCtx.drawImage(blurCanvas, 0, 0);
+                mbCtx.globalCompositeOperation = 'destination-in';
+                mbCtx.drawImage(maskCanvas, 0, 0);
+
+                fCtx.drawImage(maskedBlurCanvas, 0, 0);
+
+                finalCanvas.toBlob((blob) => {
+                    const link = document.createElement('a');
+                    link.download = `blur_edited_${Date.now()}.png`;
+                    link.href = URL.createObjectURL(blob);
+                    link.click();
+
+                    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+                    saveBtn.disabled = false; saveBtn.textContent = "저장";
+                }, 'image/png', 1.0);
+            }, 50);
+        }
+
+        init();
+    </script>
+</body>
+
+</html>
