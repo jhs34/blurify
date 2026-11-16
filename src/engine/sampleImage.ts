@@ -1,3 +1,26 @@
+const CANVAS_KO_GLYPHS =
+  '홍길동가성명연락처사원번호받는분서울특별시구로동호공동현관메모문앞보관';
+
+/**
+ * Explicitly loads the Noto Sans KR unicode-range subsets and companion Latin
+ * fonts required by Canvas 2D surfaces (specimen preview & sample test scene).
+ */
+export async function ensureCanvasFontsLoaded(): Promise<void> {
+  if (typeof document === 'undefined' || !document.fonts) return;
+  try {
+    await Promise.all([
+      document.fonts.load('500 16px "Noto Sans KR"', CANVAS_KO_GLYPHS),
+      document.fonts.load('600 20px "Noto Sans KR"', CANVAS_KO_GLYPHS),
+      document.fonts.load('700 24px "Noto Sans KR"', CANVAS_KO_GLYPHS),
+      document.fonts.load('600 17px "Plus Jakarta Sans"', 'Hong Gil-dong'),
+      document.fonts.load('600 20px "JetBrains Mono"', '010 0000 KOR'),
+      document.fonts.ready,
+    ]);
+  } catch {
+    // Ignore network or font-loading errors in offline environments
+  }
+}
+
 /**
  * Generates a deterministic, crisp 1600x1060 sample studio test scene
  * containing realistic privacy-sensitive elements (vehicle license plate,
@@ -72,7 +95,7 @@ export function createSampleCanvas(): HTMLCanvasElement {
   ctx.fill();
 
   ctx.fillStyle = '#38bdf8';
-  ctx.font = '700 20px "Plus Jakarta Sans", sans-serif';
+  ctx.font = '700 20px "Plus Jakarta Sans", "Noto Sans KR", sans-serif';
   ctx.fillText('SAMPLE PASS · ID CARD', -192, -233);
 
   // Portrait frame (ideal for Ellipse / Brush blur test)
@@ -91,24 +114,24 @@ export function createSampleCanvas(): HTMLCanvasElement {
 
   // Personal fields (ideal for Brush / Rect mosaic test)
   ctx.fillStyle = '#64748b';
-  ctx.font = '600 14px "Plus Jakarta Sans", sans-serif';
+  ctx.font = '600 14px "Plus Jakarta Sans", "Noto Sans KR", sans-serif';
   ctx.fillText('성명 / NAME', -6, -135);
   ctx.fillStyle = '#0f172a';
-  ctx.font = '700 20px "Plus Jakarta Sans", sans-serif';
+  ctx.font = '700 20px "Plus Jakarta Sans", "Noto Sans KR", sans-serif';
   ctx.fillText('홍길동 · Hong Gil-dong', -6, -102);
 
   ctx.fillStyle = '#64748b';
-  ctx.font = '600 14px "Plus Jakarta Sans", sans-serif';
+  ctx.font = '600 14px "Plus Jakarta Sans", "Noto Sans KR", sans-serif';
   ctx.fillText('연락처 / PHONE', -6, -48);
   ctx.fillStyle = '#0f172a';
-  ctx.font = '600 20px "JetBrains Mono", monospace';
+  ctx.font = '600 20px "JetBrains Mono", "Noto Sans KR", monospace';
   ctx.fillText('010 0000 0000', -6, -18);
 
   ctx.fillStyle = '#64748b';
-  ctx.font = '600 15px "Plus Jakarta Sans", sans-serif';
+  ctx.font = '600 15px "Plus Jakarta Sans", "Noto Sans KR", sans-serif';
   ctx.fillText('사원번호 / ID NO.', -190, 92);
   ctx.fillStyle = '#0f172a';
-  ctx.font = '600 23px "JetBrains Mono", monospace';
+  ctx.font = '600 23px "JetBrains Mono", "Noto Sans KR", monospace';
   ctx.fillText('ID-0000-000000', -190, 126);
 
   // Simulated barcode strip
@@ -137,20 +160,20 @@ export function createSampleCanvas(): HTMLCanvasElement {
   ctx.strokeRect(-302, -157, 604, 294);
 
   ctx.fillStyle = '#b45309';
-  ctx.font = '700 18px "JetBrains Mono", monospace';
+  ctx.font = '700 18px "JetBrains Mono", "Noto Sans KR", monospace';
   ctx.fillText('SAMPLE PARCEL · WAYBILL #0000-0000-0000', -276, -114);
 
   ctx.fillStyle = '#1e293b';
-  ctx.font = '700 25px "Plus Jakarta Sans", sans-serif';
+  ctx.font = '700 25px "Plus Jakarta Sans", "Noto Sans KR", sans-serif';
   ctx.fillText('받는분: 홍길동  |  010 0000 0000', -276, -54);
 
   ctx.fillStyle = '#334155';
-  ctx.font = '500 22px "Plus Jakarta Sans", sans-serif';
+  ctx.font = '500 22px "Plus Jakarta Sans", "Noto Sans KR", sans-serif';
   ctx.fillText('서울특별시 OO구 OO로 00, 000동 0000호', -276, 0);
   ctx.fillText('공동현관 메모: #0000* (문 앞 보관)', -276, 44);
 
   ctx.fillStyle = '#64748b';
-  ctx.font = '500 17px "JetBrains Mono", monospace';
+  ctx.font = '500 17px "JetBrains Mono", "Noto Sans KR", monospace';
   ctx.fillText('CARD NO: 0000-0000-0000-0000   EXP 00/00', -276, 104);
   ctx.restore();
 
@@ -180,12 +203,12 @@ export function createSampleCanvas(): HTMLCanvasElement {
   ctx.fill();
 
   ctx.fillStyle = '#ffffff';
-  ctx.font = '700 18px "JetBrains Mono", monospace';
+  ctx.font = '700 18px "JetBrains Mono", "Noto Sans KR", monospace';
   ctx.fillText('KOR', -292, 8);
 
   // Crisp license plate number
   ctx.fillStyle = '#0f172a';
-  ctx.font = '700 80px "JetBrains Mono", monospace';
+  ctx.font = '700 80px "JetBrains Mono", "Noto Sans KR", monospace';
   ctx.fillText('000가 0000', -208, 28);
   ctx.restore();
 

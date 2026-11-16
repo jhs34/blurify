@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FolderOpen } from 'lucide-react';
+import { ensureCanvasFontsLoaded } from '../engine/sampleImage';
 
 interface EmptyWorkspaceProps {
   isDraggingOver: boolean;
@@ -92,120 +93,134 @@ export const EmptyWorkspace: React.FC<EmptyWorkspaceProps> = ({
     ctx.restore();
   }, []);
 
-  // Pre-bake sharp & redacted specimen buffers ONCE on mount (0 per-frame allocations)
+  // Pre-bake sharp & redacted specimen buffers on mount and refresh when web fonts finish loading
   useEffect(() => {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const bw = Math.round(SPECIMEN_W * dpr);
-    const bh = Math.round(SPECIMEN_H * dpr);
+    let cancelled = false;
 
-    const sharp = document.createElement('canvas');
-    sharp.width = bw;
-    sharp.height = bh;
-    const sCtx = sharp.getContext('2d')!;
-    sCtx.scale(dpr, dpr);
+    const bakeBuffers = () => {
+      if (cancelled) return;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const bw = Math.round(SPECIMEN_W * dpr);
+      const bh = Math.round(SPECIMEN_H * dpr);
 
-    // Warm darkroom surface
-    sCtx.fillStyle = '#19191b';
-    sCtx.fillRect(0, 0, SPECIMEN_W, SPECIMEN_H);
+      const sharp = document.createElement('canvas');
+      sharp.width = bw;
+      sharp.height = bh;
+      const sCtx = sharp.getContext('2d')!;
+      sCtx.scale(dpr, dpr);
 
-    // Top specimen: Staff ID / Contact Card (demonstrates Gaussian feather blur)
-    sCtx.save();
-    sCtx.translate(28, 24);
-    sCtx.fillStyle = '#f4f4f5';
-    roundRect(sCtx, 0, 0, 364, 116, 10);
-    sCtx.fill();
+      // Warm darkroom surface
+      sCtx.fillStyle = '#19191b';
+      sCtx.fillRect(0, 0, SPECIMEN_W, SPECIMEN_H);
 
-    // Avatar silhouette
-    sCtx.fillStyle = '#d4d4d8';
-    roundRect(sCtx, 16, 18, 72, 80, 6);
-    sCtx.fill();
-    sCtx.fillStyle = '#52525b';
-    sCtx.beginPath();
-    sCtx.arc(52, 46, 15, 0, Math.PI * 2);
-    sCtx.fill();
-    sCtx.beginPath();
-    sCtx.ellipse(52, 88, 26, 20, 0, Math.PI, 0, false);
-    sCtx.fill();
+      // Top specimen: Staff ID / Contact Card (demonstrates Gaussian feather blur)
+      sCtx.save();
+      sCtx.translate(28, 24);
+      sCtx.fillStyle = '#f4f4f5';
+      roundRect(sCtx, 0, 0, 364, 116, 10);
+      sCtx.fill();
 
-    sCtx.fillStyle = '#71717a';
-    sCtx.font = '400 11px "JetBrains Mono", monospace';
-    sCtx.fillText('SAMPLE PASS · 0000', 104, 34);
+      // Avatar silhouette
+      sCtx.fillStyle = '#d4d4d8';
+      roundRect(sCtx, 16, 18, 72, 80, 6);
+      sCtx.fill();
+      sCtx.fillStyle = '#52525b';
+      sCtx.beginPath();
+      sCtx.arc(52, 46, 15, 0, Math.PI * 2);
+      sCtx.fill();
+      sCtx.beginPath();
+      sCtx.ellipse(52, 88, 26, 20, 0, Math.PI, 0, false);
+      sCtx.fill();
 
-    sCtx.fillStyle = '#18181b';
-    sCtx.font = '600 17px "Plus Jakarta Sans", sans-serif';
-    sCtx.fillText('홍길동 · Hong Gil-dong', 104, 62);
+      sCtx.fillStyle = '#71717a';
+      sCtx.font = '400 11px "JetBrains Mono", "Noto Sans KR", monospace';
+      sCtx.fillText('SAMPLE PASS · 0000', 104, 34);
 
-    sCtx.fillStyle = '#3f3f46';
-    sCtx.font = '500 14px "JetBrains Mono", monospace';
-    sCtx.fillText('010 0000 0000', 104, 88);
-    sCtx.restore();
+      sCtx.fillStyle = '#18181b';
+      sCtx.font = '600 17px "Plus Jakarta Sans", "Noto Sans KR", sans-serif';
+      sCtx.fillText('홍길동 · Hong Gil-dong', 104, 62);
 
-    // Bottom specimen: Korean Vehicle License Plate (demonstrates crisp Pixel Mosaic)
-    sCtx.save();
-    sCtx.translate(28, 164);
-    sCtx.fillStyle = '#27272a';
-    roundRect(sCtx, 0, 0, 364, 108, 12);
-    sCtx.fill();
+      sCtx.fillStyle = '#3f3f46';
+      sCtx.font = '500 14px "JetBrains Mono", "Noto Sans KR", monospace';
+      sCtx.fillText('010 0000 0000', 104, 88);
+      sCtx.restore();
 
-    sCtx.fillStyle = '#fafafa';
-    roundRect(sCtx, 6, 6, 352, 96, 8);
-    sCtx.fill();
+      // Bottom specimen: Korean Vehicle License Plate (demonstrates crisp Pixel Mosaic)
+      sCtx.save();
+      sCtx.translate(28, 164);
+      sCtx.fillStyle = '#27272a';
+      roundRect(sCtx, 0, 0, 364, 108, 12);
+      sCtx.fill();
 
-    sCtx.fillStyle = '#1d4ed8';
-    sCtx.fillRect(6, 6, 42, 96);
-    sCtx.fillStyle = '#ffffff';
-    sCtx.font = '600 11px "JetBrains Mono", monospace';
-    sCtx.fillText('KOR', 15, 58);
+      sCtx.fillStyle = '#fafafa';
+      roundRect(sCtx, 6, 6, 352, 96, 8);
+      sCtx.fill();
 
-    sCtx.fillStyle = '#18181b';
-    sCtx.font = '600 44px "JetBrains Mono", monospace';
-    sCtx.fillText('000가 0000', 74, 70);
-    sCtx.restore();
+      sCtx.fillStyle = '#1d4ed8';
+      sCtx.fillRect(6, 6, 42, 96);
+      sCtx.fillStyle = '#ffffff';
+      sCtx.font = '600 11px "JetBrains Mono", "Noto Sans KR", monospace';
+      sCtx.fillText('KOR', 15, 58);
 
-    // Build redacted counterpart: top half Gaussian blur, bottom half Pixelate
-    const redacted = document.createElement('canvas');
-    redacted.width = bw;
-    redacted.height = bh;
-    const rCtx = redacted.getContext('2d')!;
-    rCtx.drawImage(sharp, 0, 0);
+      sCtx.fillStyle = '#18181b';
+      sCtx.font = '600 44px "JetBrains Mono", "Noto Sans KR", monospace';
+      sCtx.fillText('000가 0000', 74, 70);
+      sCtx.restore();
 
-    // Gaussian blur on upper card
-    const blurTmp = document.createElement('canvas');
-    blurTmp.width = bw;
-    blurTmp.height = bh;
-    const bCtx = blurTmp.getContext('2d')!;
-    bCtx.filter = `blur(${9 * dpr}px)`;
-    bCtx.drawImage(sharp, 0, 0);
-    bCtx.filter = 'none';
+      // Build redacted counterpart: top half Gaussian blur, bottom half Pixelate
+      const redacted = document.createElement('canvas');
+      redacted.width = bw;
+      redacted.height = bh;
+      const rCtx = redacted.getContext('2d')!;
+      rCtx.drawImage(sharp, 0, 0);
 
-    rCtx.save();
-    rCtx.beginPath();
-    rCtx.rect(28 * dpr, 24 * dpr, 364 * dpr, 116 * dpr);
-    rCtx.clip();
-    rCtx.drawImage(blurTmp, 0, 0);
-    rCtx.restore();
+      // Gaussian blur on upper card
+      const blurTmp = document.createElement('canvas');
+      blurTmp.width = bw;
+      blurTmp.height = bh;
+      const bCtx = blurTmp.getContext('2d')!;
+      bCtx.filter = `blur(${9 * dpr}px)`;
+      bCtx.drawImage(sharp, 0, 0);
+      bCtx.filter = 'none';
 
-    // Crisp pixel mosaic on lower license plate
-    const blockPx = Math.max(4, Math.round(12 * dpr));
-    const cols = Math.max(1, Math.round(bw / blockPx));
-    const rows = Math.max(1, Math.round(bh / blockPx));
-    const pixTmp = document.createElement('canvas');
-    pixTmp.width = cols;
-    pixTmp.height = rows;
-    const pCtx = pixTmp.getContext('2d')!;
-    pCtx.drawImage(sharp, 0, 0, cols, rows);
+      rCtx.save();
+      rCtx.beginPath();
+      rCtx.rect(28 * dpr, 24 * dpr, 364 * dpr, 116 * dpr);
+      rCtx.clip();
+      rCtx.drawImage(blurTmp, 0, 0);
+      rCtx.restore();
 
-    rCtx.save();
-    rCtx.beginPath();
-    rCtx.rect(34 * dpr, 170 * dpr, 352 * dpr, 96 * dpr);
-    rCtx.clip();
-    rCtx.imageSmoothingEnabled = false;
-    rCtx.drawImage(pixTmp, 0, 0, cols, rows, 0, 0, bw, bh);
-    rCtx.restore();
+      // Crisp pixel mosaic on lower license plate
+      const blockPx = Math.max(4, Math.round(12 * dpr));
+      const cols = Math.max(1, Math.round(bw / blockPx));
+      const rows = Math.max(1, Math.round(bh / blockPx));
+      const pixTmp = document.createElement('canvas');
+      pixTmp.width = cols;
+      pixTmp.height = rows;
+      const pCtx = pixTmp.getContext('2d')!;
+      pCtx.drawImage(sharp, 0, 0, cols, rows);
 
-    sharpBufRef.current = sharp;
-    redactedBufRef.current = redacted;
-    drawSplitFrame(splitRef.current);
+      rCtx.save();
+      rCtx.beginPath();
+      rCtx.rect(34 * dpr, 170 * dpr, 352 * dpr, 96 * dpr);
+      rCtx.clip();
+      rCtx.imageSmoothingEnabled = false;
+      rCtx.drawImage(pixTmp, 0, 0, cols, rows, 0, 0, bw, bh);
+      rCtx.restore();
+
+      sharpBufRef.current = sharp;
+      redactedBufRef.current = redacted;
+      drawSplitFrame(splitRef.current);
+    };
+
+    bakeBuffers();
+    ensureCanvasFontsLoaded().then(() => {
+      bakeBuffers();
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [drawSplitFrame]);
 
   const handleSpecimenMove = (clientX: number) => {

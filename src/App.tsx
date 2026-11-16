@@ -13,7 +13,10 @@ import {
   normalizeAngle,
   screenToImage,
 } from './engine/math';
-import { createSampleCanvas } from './engine/sampleImage';
+import {
+  createSampleCanvas,
+  ensureCanvasFontsLoaded,
+} from './engine/sampleImage';
 import type {
   EditorSettings,
   ExportFormat,
@@ -255,8 +258,11 @@ export default function App() {
     [scheduleRender, syncHistoryFlags]
   );
 
+  const sampleLoadTokenRef = useRef(0);
+
   const loadImageFile = useCallback(
     (file: File) => {
+      sampleLoadTokenRef.current += 1;
       if (!file.type.startsWith('image/')) {
         setErrorMessage('지원되는 이미지 파일(PNG, JPG, WebP 등)을 선택해 주세요.');
         return;
@@ -277,8 +283,22 @@ export default function App() {
   );
 
   const handleLoadSample = useCallback(() => {
+    const token = ++sampleLoadTokenRef.current;
     const sample = createSampleCanvas();
     initializeSource(sample, 'sample_privacy_scene.png');
+
+    ensureCanvasFontsLoaded().then(() => {
+      const engine = engineRef.current;
+      if (
+        sampleLoadTokenRef.current === token &&
+        engine?.hasImage &&
+        engine.isMaskEmpty() &&
+        !engine.interacting
+      ) {
+        const refreshed = createSampleCanvas();
+        initializeSource(refreshed, 'sample_privacy_scene.png');
+      }
+    });
   }, [initializeSource]);
 
   const handleUndo = useCallback(() => {

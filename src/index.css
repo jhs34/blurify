@@ -1,10 +1,15 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+@theme {
+  --font-sans: "Plus Jakarta Sans", "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-mono: "JetBrains Mono", "Noto Sans KR", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 @layer base {
   :root {
-    --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
-    --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --font-sans: "Plus Jakarta Sans", "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    --font-mono: "JetBrains Mono", "Noto Sans KR", ui-monospace, SFMono-Regular, Menlo, monospace;
 
     /* Graphite neutral darkroom ramp */
     --bg-deep: #0f0f10;
